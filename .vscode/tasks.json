@@ -1,0 +1,22 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "PlatformIO",
+			"task": "Build",
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build",
+			"label": "PlatformIO: Build",
+			"presentation": {
+				//"reveal": "silent",
+				"revealProblems": "onProblem",
+				"close": true,
+				//"clear": true,
+				//"focus": true,
+				//"showReuseMessage": false
+			}
+		}
+	]
+}
