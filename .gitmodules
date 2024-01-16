@@ -1,0 +1,3 @@
+[submodule "components/htcw_rmt_led_strip"]
+	path = components/htcw_rmt_led_strip
+	url = git@github.com:gavalierm/htcw_rmt_led_strip.git
