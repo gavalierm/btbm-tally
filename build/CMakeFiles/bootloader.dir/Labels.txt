@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/CMakeFiles/bootloader
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/CMakeFiles/bootloader.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/CMakeFiles/bootloader-complete.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

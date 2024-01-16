@@ -1,0 +1,20 @@
+[0/1] Re-running CMake...
+-- Building ESP-IDF components for target esp32s3
+-- Project sdkconfig file /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/sdkconfig
+Loading defaults file /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/sdkconfig.defaults...
+warning: unknown kconfig symbol 'BTDM_CTRL_MODE_BLE_ONLY' assigned to 'y' in /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/sdkconfig.defaults
+warning: unknown kconfig symbol 'BTDM_CTRL_MODE_BR_EDR_ONLY' assigned to 'n' in /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/sdkconfig.defaults
+warning: unknown kconfig symbol 'BTDM_CTRL_MODE_BTDM' assigned to 'n' in /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/sdkconfig.defaults
+-- Compiler supported targets: xtensa-esp-elf
+-- App "btbm-tally" version: 4ff801e-dirty
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_system/ld/memory.ld
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_system/ld/esp32s3/sections.ld.in
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ld
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.api.ld
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.libgcc.ld
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.newlib.ld
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.version.ld
+-- Adding linker script /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/soc/esp32s3/ld/esp32s3.peripherals.ld
+-- Configuring incomplete, errors occurred!
+FAILED: build.ninja 
+/opt/homebrew/Cellar/cmake/3.28.1/bin/cmake --regenerate-during-build -S/Users/gavo/Projects/VYVOJ/arduino/btbm-tally -B/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build

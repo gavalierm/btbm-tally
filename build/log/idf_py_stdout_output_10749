@@ -1,0 +1,6 @@
+[0/1] Re-running CMake...
+-- Component directory /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/components/htcw_rmt_led_strip does not contain a CMakeLists.txt file. No component will be added
+-- Building ESP-IDF components for target esp32s3
+-- Configuring incomplete, errors occurred!
+FAILED: build.ninja 
+/opt/homebrew/Cellar/cmake/3.28.1/bin/cmake --regenerate-during-build -S/Users/gavo/Projects/VYVOJ/arduino/btbm-tally -B/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build

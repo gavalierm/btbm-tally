@@ -1,0 +1,10 @@
+CMake Error at esp-idf/tools/cmake/component.cmake:313 (message):
+  Include directory
+  '/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/components' is not a
+  directory.
+Call Stack (most recent call first):
+  esp-idf/tools/cmake/component.cmake:481 (__component_add_include_dirs)
+  main/CMakeLists.txt:1 (idf_component_register)
+
+
+ninja: error: rebuilding 'build.ninja': subcommand failed
