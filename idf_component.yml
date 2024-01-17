@@ -1,0 +1,5 @@
+#dependencies:
+#  # Define a dependency from a Git repository
+#  rmt_led_strip:
+#    path: rmt_led_strip
+#    git: git@github.com:gavalierm/htcw_rmt_led_strip.git

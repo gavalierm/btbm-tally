@@ -80,4 +80,5 @@
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/touch_element/libtouch_element.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/usb/libusb.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/espressif__led_strip/libespressif__led_strip.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/main/libmain.a

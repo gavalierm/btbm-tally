@@ -1,1 +1,1 @@
-idf_component_register(SRCS "main.c" INCLUDE_DIRS "../components" REQUIRES htcw_rmt_led_strip)
+idf_component_register(SRCS "main.c" INCLUDE_DIRS ".")

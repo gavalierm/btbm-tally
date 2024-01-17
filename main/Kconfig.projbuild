@@ -1,4 +1,4 @@
-menu "STATION Configuration"
+menu "Variables Configuration"
 
     config ESP_MQTT_HOST_URI
         string "MQTT host URI"

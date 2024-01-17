@@ -1,0 +1,74 @@
+[1/10] Performing build step for 'bootloader'
+[1/1] cd /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader/esp-idf/esptool_py && /Users/gavo/.espressif/python_env/idf5.3_py3.11_env/bin/python /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/bootloader/bootloader.bin
+Bootloader binary size 0x5240 bytes. 0x2dc0 bytes (36%) free.
+[2/10] No install step for 'bootloader'
+[3/10] Completed 'bootloader'
+[4/10] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/main.c.obj
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c: In function 'do_signal_no_period':
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c:174:9: warning: unused variable 'count' [-Wunused-variable]
+  174 |     int count = 10;
+      |         ^~~~~
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c: In function 'configure_led':
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c:191:24: warning: unused variable 'strip_config_shield' [-Wunused-variable]
+  191 |     led_strip_config_t strip_config_shield = {
+      |                        ^~~~~~~~~~~~~~~~~~~
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c: At top level:
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c:161:13: warning: 'do_signal_blink' defined but not used [-Wunused-function]
+  161 | static void do_signal_blink(int color[3])
+      |             ^~~~~~~~~~~~~~~
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c:120:13: warning: 'setLastColor' defined but not used [-Wunused-function]
+  120 | static void setLastColor(int color[3]){
+      |             ^~~~~~~~~~~~
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/main/main.c:62:16: warning: 's_led_state' defined but not used [-Wunused-variable]
+   62 | static uint8_t s_led_state = 0;
+      |                ^~~~~~~~~~~
+[5/10] Linking C static library esp-idf/main/libmain.a
+[6/10] Generating ld/sections.ld
+[7/10] Linking CXX executable btbm-tally.elf
+[8/10] Generating binary image from built executable
+esptool.py vv4.8.dev1
+Creating esp32s3 image...
+Merged 2 ELF sections
+Successfully created esp32s3 image.
+Generated /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/btbm-tally.bin
+[9/10] cd /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esptool_py && /Users/gavo/.espressif/python_env/idf5.3_py3.11_env/bin/python /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/partition_table/partition-table.bin /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/btbm-tally.bin
+btbm-tally.bin binary size 0x469a0 bytes. Smallest app partition is 0x177000 bytes. 0x130660 bytes (81%) free.
+[9/10] cd /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esptool_py && /opt/homebrew/Cellar/cmake/3.28.1/bin/cmake -D IDF_PATH=/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf -D "SERIAL_TOOL=/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/bin/python;;/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esptool_py/esptool/esptool.py;--chip;esp32s3" -D "SERIAL_TOOL_ARGS=--before=default_reset;--after=hard_reset;write_flash;@flash_args" -D WORKING_DIRECTORY=/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build -P /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esptool_py/run_serial_tool.cmake
+esptool.py --chip esp32s3 -p /dev/cu.usbmodem2101 -b 115200 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 80m --flash_size 2MB 0x0 bootloader/bootloader.bin 0x10000 btbm-tally.bin 0x8000 partition_table/partition-table.bin
+esptool.py vv4.8.dev1
+Serial port /dev/cu.usbmodem2101
+Connecting...
+Chip is ESP32-S3 (QFN56) (revision v0.1)
+Features: WiFi, BLE, Embedded Flash 4MB (XMC), Embedded PSRAM 2MB (AP_3v3)
+Crystal is 40MHz
+MAC: dc:54:75:d6:0d:18
+Uploading stub...
+Running stub...
+Stub running...
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00010000 to 0x00056fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Compressed 21056 bytes to 13083...
+Writing at 0x00000000... (100 %)
+Wrote 21056 bytes (13083 compressed) at 0x00000000 in 0.3 seconds (effective 495.1 kbit/s)...
+Hash of data verified.
+Compressed 289184 bytes to 145436...
+Writing at 0x00010000... (11 %)
+Writing at 0x0001c7b8... (22 %)
+Writing at 0x00024f79... (33 %)
+Writing at 0x0002b90e... (44 %)
+Writing at 0x00031773... (55 %)
+Writing at 0x0003b99b... (66 %)
+Writing at 0x00043052... (77 %)
+Writing at 0x0004a7cd... (88 %)
+Writing at 0x00050b79... (100 %)
+Wrote 289184 bytes (145436 compressed) at 0x00010000 in 2.5 seconds (effective 936.6 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 105...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (105 compressed) at 0x00008000 in 0.0 seconds (effective 584.9 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
