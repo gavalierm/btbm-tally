@@ -5981,189 +5981,233 @@
     {
         "children": [
             {
-                "children": [],
+                "children": [
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "SSID (network name) to connect to.",
+                        "id": "ESP_WIFI_SSID",
+                        "name": "ESP_WIFI_SSID",
+                        "range": null,
+                        "title": "WiFi SSID",
+                        "type": "string"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "WiFi password (WPA or WPA2) to use.",
+                        "id": "ESP_WIFI_PASSWORD",
+                        "name": "ESP_WIFI_PASSWORD",
+                        "range": null,
+                        "title": "WiFi Password",
+                        "type": "string"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.",
+                        "id": "ESP_MAXIMUM_RETRY",
+                        "name": "ESP_MAXIMUM_RETRY",
+                        "range": null,
+                        "title": "Maximum retry",
+                        "type": "int"
+                    },
+                    {
+                        "children": [
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SAE_MODE>",
+                                "help": null,
+                                "id": "ESP_WPA3_SAE_PWE_HUNT_AND_PECK",
+                                "name": "ESP_WPA3_SAE_PWE_HUNT_AND_PECK",
+                                "range": null,
+                                "title": "HUNT AND PECK",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SAE_MODE>",
+                                "help": null,
+                                "id": "ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT",
+                                "name": "ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT",
+                                "range": null,
+                                "title": "H2E",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SAE_MODE>",
+                                "help": null,
+                                "id": "ESP_WPA3_SAE_PWE_BOTH",
+                                "name": "ESP_WPA3_SAE_PWE_BOTH",
+                                "range": null,
+                                "title": "BOTH",
+                                "type": "bool"
+                            }
+                        ],
+                        "depends_on": null,
+                        "help": "Select mode for SAE as Hunt and Peck, H2E or both.",
+                        "id": "station-vars-configuration-wifi-configuration-wpa3-sae-mode-selection",
+                        "name": "ESP_WIFI_SAE_MODE",
+                        "title": "WPA3 SAE mode selection",
+                        "type": "choice"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": "ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT || ESP_WPA3_SAE_PWE_BOTH",
+                        "help": "password identifier for SAE H2E",
+                        "id": "ESP_WIFI_PW_ID",
+                        "name": "ESP_WIFI_PW_ID",
+                        "range": null,
+                        "title": "PASSWORD IDENTIFIER",
+                        "type": "string"
+                    },
+                    {
+                        "children": [
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_OPEN",
+                                "name": "ESP_WIFI_AUTH_OPEN",
+                                "range": null,
+                                "title": "OPEN",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_WEP",
+                                "name": "ESP_WIFI_AUTH_WEP",
+                                "range": null,
+                                "title": "WEP",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_WPA_PSK",
+                                "name": "ESP_WIFI_AUTH_WPA_PSK",
+                                "range": null,
+                                "title": "WPA PSK",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_WPA2_PSK",
+                                "name": "ESP_WIFI_AUTH_WPA2_PSK",
+                                "range": null,
+                                "title": "WPA2 PSK",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_WPA_WPA2_PSK",
+                                "name": "ESP_WIFI_AUTH_WPA_WPA2_PSK",
+                                "range": null,
+                                "title": "WPA/WPA2 PSK",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_WPA3_PSK",
+                                "name": "ESP_WIFI_AUTH_WPA3_PSK",
+                                "range": null,
+                                "title": "WPA3 PSK",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_WPA2_WPA3_PSK",
+                                "name": "ESP_WIFI_AUTH_WPA2_WPA3_PSK",
+                                "range": null,
+                                "title": "WPA2/WPA3 PSK",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
+                                "help": null,
+                                "id": "ESP_WIFI_AUTH_WAPI_PSK",
+                                "name": "ESP_WIFI_AUTH_WAPI_PSK",
+                                "range": null,
+                                "title": "WAPI PSK",
+                                "type": "bool"
+                            }
+                        ],
+                        "depends_on": null,
+                        "help": "The weakest authmode to accept in the scan mode.\nThis value defaults to ESP_WIFI_AUTH_WPA2_PSK incase password is present and ESP_WIFI_AUTH_OPEN is used.\nPlease select ESP_WIFI_AUTH_WEP/ESP_WIFI_AUTH_WPA_PSK incase AP is operating in WEP/WPA mode.",
+                        "id": "station-vars-configuration-wifi-configuration-wifi-scan-auth-mode-threshold",
+                        "name": "ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD",
+                        "title": "WiFi Scan auth mode threshold",
+                        "type": "choice"
+                    }
+                ],
                 "depends_on": null,
-                "help": "Change this if needed. Do not forget \"mqtt://HOST:PORT\"",
-                "id": "ESP_MQTT_HOST_URI",
-                "name": "ESP_MQTT_HOST_URI",
-                "range": null,
-                "title": "MQTT host URI",
-                "type": "string"
-            },
-            {
-                "children": [],
-                "depends_on": null,
-                "help": "SSID (network name) to connect to.",
-                "id": "ESP_WIFI_SSID",
-                "name": "ESP_WIFI_SSID",
-                "range": null,
-                "title": "WiFi SSID",
-                "type": "string"
-            },
-            {
-                "children": [],
-                "depends_on": null,
-                "help": "WiFi password (WPA or WPA2) to use.",
-                "id": "ESP_WIFI_PASSWORD",
-                "name": "ESP_WIFI_PASSWORD",
-                "range": null,
-                "title": "WiFi Password",
-                "type": "string"
-            },
-            {
-                "children": [],
-                "depends_on": null,
-                "help": "Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.",
-                "id": "ESP_MAXIMUM_RETRY",
-                "name": "ESP_MAXIMUM_RETRY",
-                "range": null,
-                "title": "Maximum retry",
-                "type": "int"
+                "id": "station-vars-configuration-wifi-configuration",
+                "title": "WIFI Configuration",
+                "type": "menu"
             },
             {
                 "children": [
                     {
                         "children": [],
-                        "depends_on": "<choice ESP_WIFI_SAE_MODE>",
-                        "help": null,
-                        "id": "ESP_WPA3_SAE_PWE_HUNT_AND_PECK",
-                        "name": "ESP_WPA3_SAE_PWE_HUNT_AND_PECK",
+                        "depends_on": null,
+                        "help": "Change this if needed. Do not forget \"mqtt://HOST:PORT\"",
+                        "id": "ESP_MQTT_HOST_URI",
+                        "name": "ESP_MQTT_HOST_URI",
                         "range": null,
-                        "title": "HUNT AND PECK",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SAE_MODE>",
-                        "help": null,
-                        "id": "ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT",
-                        "name": "ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT",
-                        "range": null,
-                        "title": "H2E",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SAE_MODE>",
-                        "help": null,
-                        "id": "ESP_WPA3_SAE_PWE_BOTH",
-                        "name": "ESP_WPA3_SAE_PWE_BOTH",
-                        "range": null,
-                        "title": "BOTH",
-                        "type": "bool"
+                        "title": "MQTT host URI",
+                        "type": "string"
                     }
                 ],
                 "depends_on": null,
-                "help": "Select mode for SAE as Hunt and Peck, H2E or both.",
-                "id": "station-configuration-wpa3-sae-mode-selection",
-                "name": "ESP_WIFI_SAE_MODE",
-                "title": "WPA3 SAE mode selection",
-                "type": "choice"
-            },
-            {
-                "children": [],
-                "depends_on": "ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT || ESP_WPA3_SAE_PWE_BOTH",
-                "help": "password identifier for SAE H2E",
-                "id": "ESP_WIFI_PW_ID",
-                "name": "ESP_WIFI_PW_ID",
-                "range": null,
-                "title": "PASSWORD IDENTIFIER",
-                "type": "string"
+                "id": "station-vars-configuration-mqtt-configuration",
+                "title": "MQTT Configuration",
+                "type": "menu"
             },
             {
                 "children": [
                     {
                         "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_OPEN",
-                        "name": "ESP_WIFI_AUTH_OPEN",
+                        "depends_on": null,
+                        "help": "Depends on board or soldering. Default for ESP32-S3 is 47.",
+                        "id": "ESP_LED_PIN",
+                        "name": "ESP_LED_PIN",
                         "range": null,
-                        "title": "OPEN",
-                        "type": "bool"
+                        "title": "LED pin",
+                        "type": "int"
                     },
                     {
                         "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_WEP",
-                        "name": "ESP_WIFI_AUTH_WEP",
+                        "depends_on": null,
+                        "help": "Depends on shield. Default internel pin is onlyone. Common ring shield have 7.",
+                        "id": "ESP_LED_PIN_LEN",
+                        "name": "ESP_LED_PIN_LEN",
                         "range": null,
-                        "title": "WEP",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_WPA_PSK",
-                        "name": "ESP_WIFI_AUTH_WPA_PSK",
-                        "range": null,
-                        "title": "WPA PSK",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_WPA2_PSK",
-                        "name": "ESP_WIFI_AUTH_WPA2_PSK",
-                        "range": null,
-                        "title": "WPA2 PSK",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_WPA_WPA2_PSK",
-                        "name": "ESP_WIFI_AUTH_WPA_WPA2_PSK",
-                        "range": null,
-                        "title": "WPA/WPA2 PSK",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_WPA3_PSK",
-                        "name": "ESP_WIFI_AUTH_WPA3_PSK",
-                        "range": null,
-                        "title": "WPA3 PSK",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_WPA2_WPA3_PSK",
-                        "name": "ESP_WIFI_AUTH_WPA2_WPA3_PSK",
-                        "range": null,
-                        "title": "WPA2/WPA3 PSK",
-                        "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": "<choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD>",
-                        "help": null,
-                        "id": "ESP_WIFI_AUTH_WAPI_PSK",
-                        "name": "ESP_WIFI_AUTH_WAPI_PSK",
-                        "range": null,
-                        "title": "WAPI PSK",
-                        "type": "bool"
+                        "title": "LED pixels count",
+                        "type": "int"
                     }
                 ],
                 "depends_on": null,
-                "help": "The weakest authmode to accept in the scan mode.\nThis value defaults to ESP_WIFI_AUTH_WPA2_PSK incase password is present and ESP_WIFI_AUTH_OPEN is used.\nPlease select ESP_WIFI_AUTH_WEP/ESP_WIFI_AUTH_WPA_PSK incase AP is operating in WEP/WPA mode.",
-                "id": "station-configuration-wifi-scan-auth-mode-threshold",
-                "name": "ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD",
-                "title": "WiFi Scan auth mode threshold",
-                "type": "choice"
+                "id": "station-vars-configuration-led-configuration",
+                "title": "LED Configuration",
+                "type": "menu"
             }
         ],
         "depends_on": null,
-        "id": "station-configuration",
-        "title": "STATION Configuration",
+        "id": "station-vars-configuration",
+        "title": "STATION Vars Configuration",
         "type": "menu"
     },
     {

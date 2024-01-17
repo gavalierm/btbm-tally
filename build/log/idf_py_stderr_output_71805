@@ -1,6 +1,0 @@
-[0;33m--- esp-idf-monitor 1.3.4 on /dev/cu.usbmodem2101 115200 ---[0m
-[0;33m--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---[0m
-[0;33m0x4037b47e: esp_cpu_wait_for_intr at /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_hw_support/cpu.c:145
-[0m
-[1;31m--- unknown menu character 'c' --[0m
-[0m

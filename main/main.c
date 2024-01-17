@@ -36,11 +36,8 @@
 #define ESP_MAXIMUM_RETRY   CONFIG_ESP_MAXIMUM_RETRY
 #define ESP_MQTT_HOST_URI   CONFIG_ESP_MQTT_HOST_URI
 
-#define INTERNAL_LED_GPIO 47 //CONFIG_INTERNAL_LED_GPIO
-#define INTERNAL_LED_LEN 1 //CONFIG_INTERNAL_LED_GPIO
-#define SHIELD_GPIO 47 //CONFIG_INTERNAL_LED_GPIO
-#define SHIELD_LEN 7 //CONFIG_INTERNAL_LED_GPIO
-
+#define LED_SHIELD_GPIO     CONFIG_ESP_LED_PIN //CONFIG_LED_SHIELD_GPIO
+#define LED_SHIELD_LENGHT   CONFIG_ESP_LED_PIN_LEN //CONFIG_LED_SHIELD_GPIO
 
 #define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_SPI true //force to spi //rmt is beter on 2 cores
 #define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT false
@@ -130,6 +127,16 @@ static void do_signal(int color[3])
         led_strip_clear(led_strip);
         return;
     }
+    //count LUMA
+    if (luminance < 0) {
+        luminance = 0;
+    } else if (luminance > 255) {
+        luminance = 255;
+    }
+
+    color[0] = (color[0] * luminance) / 255;
+    color[1] = (color[1] * luminance) / 255;
+    color[2] = (color[2] * luminance) / 255;
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
     led_strip_set_pixel(led_strip, 0, color[1], color[0], color[2]); //GBR
     /* Refresh the strip to send data */
@@ -163,7 +170,6 @@ static void do_signal_blink(int color[3])
 
 static void do_signal_no_period(int color[3])
 {
-    int count = 10;
     int blink_len = 50;
     //
     do_signal(color);
@@ -175,30 +181,22 @@ static void configure_led(void)
 {
     ESP_LOGI(TAG, "Example configured to do_signal addressable LED!");
     /* LED strip initialization with the GPIO and pixels number*/
-    led_strip_config_t strip_config_internal = {
-        .strip_gpio_num = INTERNAL_LED_GPIO,
-        .max_leds = INTERNAL_LED_LEN, // at least one LED on board
-    };
-    /* LED strip initialization with the GPIO and pixels number*/
-    led_strip_config_t strip_config_shield = {
-        .strip_gpio_num = SHIELD_GPIO,
-        .max_leds = SHIELD_LEN, // at least one LED on board
+    led_strip_config_t strip_config = {
+        .strip_gpio_num = LED_SHIELD_GPIO,
+        .max_leds = LED_SHIELD_LENGHT, // at least one LED on board
     };
 #if CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT
     led_strip_rmt_config_t rmt_config = {
         .resolution_hz = 10 * 1000 * 1000, // 10MHz
         .flags.with_dma = false,
     };
-    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config_internal, &rmt_config, &led_strip));
-    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config_shield, &rmt_config, &led_strip));
+    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
 #elif CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_SPI
     led_strip_spi_config_t spi_config = {
         .spi_bus = SPI2_HOST,
         .flags.with_dma = true,
     };
-    /////// SPI bus is only one you can not have internal and sheild pick one
-    ESP_ERROR_CHECK(led_strip_new_spi_device(&strip_config_internal, &spi_config, &led_strip));
-    //ESP_ERROR_CHECK(led_strip_new_spi_device(&strip_config_shield, &spi_config, &led_strip));
+    ESP_ERROR_CHECK(led_strip_new_spi_device(&strip_config, &spi_config, &led_strip));
 #else
 #error "unsupported LED strip backend"
 #endif
@@ -234,7 +232,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         esp_wifi_state = S_WIFI_CONNECTED;
-        do_signal_no_period(green);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
@@ -279,7 +276,6 @@ static void  wifi_init_sta(void)
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
-        
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
     } else {
@@ -379,7 +375,7 @@ static void mqtt_app_start(void)
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
-    esp_wifi_state = S_MQTT_CONNECTING;
+    esp_mqtt_state = S_MQTT_CONNECTING;
 }
 
 
@@ -398,7 +394,7 @@ void loopWifi(){
         return;
     }
     uint64_t startTime = millis();
-    int timeout = 60 * 2;
+    int timeout = 30;
     ESP_LOGE(TAG, "[APP] loopWifi not esgablished ....");
     while (esp_wifi_state != S_WIFI_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(pink);
@@ -410,7 +406,7 @@ void loopMQTT(){
         return;
     }
     uint64_t startTime = millis();
-    int timeout = 60 * 2;
+    int timeout = 30;
     ESP_LOGE(TAG, "[APP] loopMQTT not esgablished ....");
     while (esp_mqtt_state != S_MQTT_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(yellow);
@@ -422,7 +418,7 @@ void loopBLE(){
         return;
     }
     uint64_t startTime = millis();
-    int timeout = 10;
+    int timeout = 30;
     ESP_LOGE(TAG, "[APP] loopBLE not esgablished ....");
     while (esp_ble_state != S_BLE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(blue);
@@ -482,14 +478,14 @@ void app_main(void)
     if (esp_ble_state != S_BLE_CONNECTED) {
         loopBLE();
         if (esp_ble_state != S_BLE_CONNECTED) {
-            ESP_LOGE(TAG, "[APP] DIE DIE DIE ....");
-            stopESP();
-            return; //die
+            //ESP_LOGE(TAG, "[APP] DIE DIE DIE ....");
+            //stopESP(); //BLE does not break the bank
+            //return; //die
         }
     }
-
-    do_signal(green);  
+  
     while (1) {
+        do_signal(green);
         loopWifi();
         loopMQTT(); 
         loopBLE(); 

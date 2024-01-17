@@ -509,12 +509,15 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
-# STATION Configuration
+# STATION Vars Configuration
 #
-CONFIG_ESP_MQTT_HOST_URI="mqtt://10.32.99.105:1883"
+
+#
+# WIFI Configuration
+#
 CONFIG_ESP_WIFI_SSID="VideoPP"
 CONFIG_ESP_WIFI_PASSWORD="ZelenaParadajka24"
-CONFIG_ESP_MAXIMUM_RETRY=25
+CONFIG_ESP_MAXIMUM_RETRY=5
 # CONFIG_ESP_WPA3_SAE_PWE_HUNT_AND_PECK is not set
 # CONFIG_ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT is not set
 CONFIG_ESP_WPA3_SAE_PWE_BOTH=y
@@ -527,7 +530,21 @@ CONFIG_ESP_WIFI_AUTH_WPA2_PSK=y
 # CONFIG_ESP_WIFI_AUTH_WPA3_PSK is not set
 # CONFIG_ESP_WIFI_AUTH_WPA2_WPA3_PSK is not set
 # CONFIG_ESP_WIFI_AUTH_WAPI_PSK is not set
-# end of STATION Configuration
+# end of WIFI Configuration
+
+#
+# MQTT Configuration
+#
+CONFIG_ESP_MQTT_HOST_URI="mqtt://10.32.99.105:1883"
+# end of MQTT Configuration
+
+#
+# LED Configuration
+#
+CONFIG_ESP_LED_PIN=47
+CONFIG_ESP_LED_PIN_LEN=1
+# end of LED Configuration
+# end of STATION Vars Configuration
 
 #
 # Compiler options
