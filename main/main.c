@@ -9,6 +9,7 @@
 #include "esp_event.h"
 #include "esp_timer.h"  // Include the ESP timer header
 #include "esp_sleep.h"
+#include "esp_mac.h"
 
 //#include "esp_netif.h" //koli NIC
 //#include "protocol_examples_common.h" //koli examples
@@ -43,20 +44,15 @@
 #define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT false
 #define CONFIG_INTERNAL_LED_PERIOD 1000
 
+#define CUSTOM_PROTOCOL_TALLY_CATEGORY 128 //in CCU protocol this values are unused for now
+#define CUSTOM_PROTOCOL_BLE_CATEGORY 129 //in CCU protocol this values are unused for now
+
 /* The event group allows multiple bits for each event, but we only care about two events:
  * - we are connected to the AP with an IP
  * - we failed to connect after the maximum amount of retries */
 #define WIFI_FAIL_BIT       ( 1 << 0 ) //each BIT like 0000
 #define WIFI_CONNECTED_BIT  ( 1 << 1 ) //each BIT like 0010
 //this means that you set new bit and clear others...
-
-/* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
-
-static const char *TAG = "ESP";
-
-static int s_retry_num = 0;
-
 // Define the enumeration
 typedef enum {
     S_WIFI_DISCONNECTED,
@@ -80,6 +76,16 @@ typedef enum {
     S_BLE_CONNECTED
     // Add more states as needed
 } BLEState;
+/* FreeRTOS event group to signal when we are connected*/
+static EventGroupHandle_t s_wifi_event_group;
+
+static const char *TAG = "ESP";
+
+static int s_retry_num = 0;
+
+uint8_t derived_mac_addr[6] = {0};
+
+static led_strip_handle_t led_strip;
 
 //signaling color
 int luminance = 255; //at full
@@ -99,6 +105,13 @@ WifiState esp_wifi_state = S_WIFI_DISCONNECTED;
 MQTTState esp_mqtt_state = S_MQTT_DISCONNECTED;
 BLEState esp_ble_state = S_BLE_DISCONNECTED;
 
+// this value have to be set from BLE handshaking
+// this value determine which device this ESP represnets
+// because CCU protocol use First Byte as "destination", so like CCU data for Camera 1 have first byte set to 01
+// FF aka 255 is for broadcast for all devices
+// we start as 255 to catch all messages, after MQTT handskage we will wait to "Who I M" message from controller
+int who_im = 255; //255 means all data is for me
+
 // Function to get current time in milliseconds
 uint64_t millis() {
     return esp_timer_get_time() / 1000ULL;
@@ -117,9 +130,6 @@ static bool cmpColor(int arr1[3], int arr2[3]){
     }
     return false;
 }
-
-
-static led_strip_handle_t led_strip;
 
 static void do_signal(int color[3])
 {
@@ -298,6 +308,31 @@ static void  wifi_init_sta(void)
  * @param event_id The id for the received event.
  * @param event_data The data for the event, esp_mqtt_event_handle_t.
  */
+
+// Function to convert raw data to a hexadecimal string with spaces and log using ESP_LOGI
+void log_hex_data(const char *log_tag, const uint8_t *raw_data, size_t raw_data_len) {
+    char hex_string[(raw_data_len * 3) + 1]; // Each byte takes 3 characters (2 hex + 1 space)
+    size_t index = 0;
+
+    for (size_t i = 0; i < raw_data_len; i++) {
+        index += snprintf(&hex_string[index], sizeof(hex_string) - index, "%02X ", raw_data[i]);
+    }
+
+    ESP_LOGI(log_tag, "%s", hex_string);
+}
+
+static void onTallyOperation(esp_mqtt_event_handle_t event){
+    ESP_LOGW(TAG, "onTallyOperation: ");
+}
+
+static void onBLEOperation(esp_mqtt_event_handle_t event){
+    ESP_LOGW(TAG, "onBLEOperation: ");
+}
+
+static void onCCUOperation(esp_mqtt_event_handle_t event){
+    ESP_LOGW(TAG, "onCCUOperation: ");
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
@@ -310,17 +345,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         esp_mqtt_state = S_MQTT_CONNECTED;
         //esp_mqtt_client_enqueue is non-blocking
         //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
-        msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-
-        msg_id = esp_mqtt_client_subscribe(client, "/topic/qos0", 0);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-        msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-        msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
-        ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
+        msg_id = esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)derived_mac_addr, sizeof(derived_mac_addr), 0, 0, true); //true means store for non-block
+        //ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+        msg_id = esp_mqtt_client_subscribe(client, "/btmqtt/ccu/raw/upstream", 0);
         break;
     case MQTT_EVENT_DISCONNECTED:
         esp_mqtt_state = S_MQTT_DISCONNECTED;
@@ -330,8 +357,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        msg_id = esp_mqtt_client_publish(client, "/topic/qos0", "data", 0, 0, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_UNSUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
@@ -341,9 +366,29 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_DATA:
         esp_mqtt_state = S_MQTT_CONNECTED;
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA on TOPIC=%.*s\r\n", event->topic_len, event->topic);
+        //because we are subscribed to the one topic, the topic is not relevant
+        log_hex_data(TAG, (const uint8_t *)event->data, event->data_len);
+        if(event->data[0] != 255 || event->data[0] != who_im || event->data[3] == who_im){
+            // the byte 3 is reserved for nothing and should be 0, we use them for our purposes
+            ESP_LOGW(TAG, "Not for me or loopback from myself");
+            return;
+        }
+        //check data and determine the operation
+        switch (event->data[4]) {
+            case CUSTOM_PROTOCOL_TALLY_CATEGORY:
+                //tally
+                onTallyOperation(event);
+                break;
+            case CUSTOM_PROTOCOL_BLE_CATEGORY:
+                //ble handskage
+                onBLEOperation(event);
+                break;
+            default:
+                //all others data is for CCU
+                onCCUOperation(event);
+                break;
+            }
         break;
     case MQTT_EVENT_ERROR:
         // TODO catch connecing error to set connecting state
@@ -430,7 +475,11 @@ void loopBLE(){
 void app_main(void)
 {
 
+    esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_STA);
+
+
     ESP_LOGI(TAG, "[APP] Startup..");
+    ESP_LOGI(TAG, "ESP32 ID: \n\n\n%02X:%02X:%02X:%02X:%02X:%02X\n\n\n",derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
     ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 

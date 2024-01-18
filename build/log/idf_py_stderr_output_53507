@@ -1,0 +1,5 @@
+[0;33m--- esp-idf-monitor 1.3.4 on /dev/cu.usbmodem2101 115200 ---[0m
+[0;33m--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---[0m
+[0;33m0x42007024: esp_mprot_set_prot at /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/components/esp_hw_support/port/esp32s3/esp_memprot.c:1076 (discriminator 1)
+[0m
+[0m
