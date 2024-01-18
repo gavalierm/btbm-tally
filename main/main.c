@@ -356,7 +356,7 @@ static void onTallyOperation(esp_mqtt_event_handle_t event){
     //ESP_LOGW(TAG, "onTallyOperation: ");
     switch (event->data[5]) {
         case 0:
-            signaling = event->data[5];
+            signaling = event->data[8];
             check_signaling();
             break;
         case 1:
