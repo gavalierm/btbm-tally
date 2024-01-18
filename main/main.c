@@ -111,6 +111,7 @@ BLEState esp_ble_state = S_BLE_DISCONNECTED;
 // FF aka 255 is for broadcast for all devices
 // we start as 255 to catch all messages, after MQTT handskage we will wait to "Who I M" message from controller
 int who_im = 255; //255 means all data is for me
+int signaling = 0;
 
 // Function to get current time in milliseconds
 uint64_t millis() {
@@ -131,26 +132,31 @@ static bool cmpColor(int arr1[3], int arr2[3]){
     return false;
 }
 
+static void do_signal_color(int red, int green, int blue, int luma){
+    if (luma < 0) {
+        luma = 0;
+    } else if (luma > 255) {
+        luma = 255;
+    }
+    
+    red = (red * luma) / 255;
+    green = (green * luma) / 255;
+    blue = (blue * luma) / 255;
+
+    /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
+    led_strip_set_pixel(led_strip, 0, green, red, blue); //GBR
+    /* Refresh the strip to send data */
+    led_strip_refresh(led_strip);
+}
+
 static void do_signal(int color[3])
 {
     if(cmpColor(color, black)){
         led_strip_clear(led_strip);
         return;
     }
-    //count LUMA
-    if (luminance < 0) {
-        luminance = 0;
-    } else if (luminance > 255) {
-        luminance = 255;
-    }
-
-    color[0] = (color[0] * luminance) / 255;
-    color[1] = (color[1] * luminance) / 255;
-    color[2] = (color[2] * luminance) / 255;
-    /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-    led_strip_set_pixel(led_strip, 0, color[1], color[0], color[2]); //GBR
-    /* Refresh the strip to send data */
-    led_strip_refresh(led_strip);
+    //luminance is global
+    return do_signal_color(color[0], color[1], color[2], luminance);
 }
 
 static void do_signal_blink_panic(int color[3])
@@ -321,8 +327,79 @@ void log_hex_data(const char *log_tag, const uint8_t *raw_data, size_t raw_data_
     ESP_LOGI(log_tag, "%s", hex_string);
 }
 
+static bool check_signaling(){
+    switch (signaling) {
+        case 0:
+            do_signal(gray);
+            return false;
+            break;
+        case 1:
+            do_signal(yellow);
+            return true;
+            break;
+        case 2:
+            while(1){
+                 do_signal_blink(yellow);
+                 vTaskDelay(1);
+            }
+            return true;
+            break;
+        case 3:
+            do_signal(blue);
+            return true;
+            break;
+    }
+    return false;
+}
+
 static void onTallyOperation(esp_mqtt_event_handle_t event){
-    ESP_LOGW(TAG, "onTallyOperation: ");
+    //ESP_LOGW(TAG, "onTallyOperation: ");
+    switch (event->data[5]) {
+        case 0:
+            signaling = event->data[5];
+            check_signaling();
+            break;
+        case 1:
+            if(event->data_len < 10){
+                // the protocol at least 8 bytes
+                ESP_LOGE(TAG, "Too few bytes for TALLY");
+                return;
+            }
+            if(check_signaling()){
+                return;
+            }
+            if(event->data[8] == who_im || event->data[8] == 255){
+                //pgm
+                ESP_LOGI(TAG, "set TALLY: PGM");
+                do_signal(red);
+            }else if(event->data[9] == who_im || event->data[9] == 255){
+                //pvw
+                ESP_LOGI(TAG, "set TALLY: PVW");
+                do_signal(green);
+            }else{
+                //off
+                ESP_LOGI(TAG, "set TALLY: OFF");
+                do_signal(gray); //we signaling off as gray wo know that tally is working even is not in pgm/pvw state
+            }
+            break;
+        case 2:
+            if(event->data_len < 12){
+                // the protocol at least 8 bytes
+                ESP_LOGE(TAG, "Too few bytes for COLOR");
+                return;
+            }
+            if(check_signaling()){
+                return;
+            }
+            if(event->data[0] == who_im){
+                //for color we check the destination
+                ESP_LOGI(TAG, "set COLOR: ");
+                // set tally by color / this ignore luminance setting
+                //rgba
+                do_signal_color( event->data[8],  event->data[9],  event->data[10],  event->data[11]);
+            }
+            break;
+    }
 }
 
 static void onBLEOperation(esp_mqtt_event_handle_t event){
@@ -331,6 +408,8 @@ static void onBLEOperation(esp_mqtt_event_handle_t event){
 
 static void onCCUOperation(esp_mqtt_event_handle_t event){
     ESP_LOGW(TAG, "onCCUOperation: ");
+    //just forward data to the BLE
+    //sendBLE(event->data);
 }
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -366,15 +445,26 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_DATA:
         esp_mqtt_state = S_MQTT_CONNECTED;
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA on TOPIC=%.*s\r\n", event->topic_len, event->topic);
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA on LEN=%d TOPIC=%s\r\n", event->topic_len, event->topic);
         //because we are subscribed to the one topic, the topic is not relevant
-        log_hex_data(TAG, (const uint8_t *)event->data, event->data_len);
-        if(event->data[0] != 255 || event->data[0] != who_im || event->data[3] == who_im){
-            // the byte 3 is reserved for nothing and should be 0, we use them for our purposes
-            ESP_LOGW(TAG, "Not for me or loopback from myself");
+        if(event->data_len < 8){
+            // the protocol at least 8 bytes
+            ESP_LOGE(TAG, "Too few bytes");
             return;
         }
+
+        if(event->data[3] == who_im){
+            // the byte 3 is reserved for nothing and should be 0, we use them for our purposes
+            ESP_LOGW(TAG, "Loopback from myself");
+            return;
+        }
+
+        if(event->data[0] == 255){
+            //broadcast is for me
+            event->data[0] = who_im;
+        }
         //check data and determine the operation
+        log_hex_data(TAG, (const uint8_t *)event->data, event->data_len);
         switch (event->data[4]) {
             case CUSTOM_PROTOCOL_TALLY_CATEGORY:
                 //tally
@@ -532,11 +622,13 @@ void app_main(void)
             //return; //die
         }
     }
-  
+    
+    check_signaling();
+
     while (1) {
-        do_signal(green);
         loopWifi();
         loopMQTT(); 
-        loopBLE(); 
+        //loopBLE(); 
+        vTaskDelay(pdMS_TO_TICKS(1000)); //vTaskDelay(1000); //check every 1 second
     }
 }
