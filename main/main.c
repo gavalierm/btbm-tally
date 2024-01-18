@@ -356,7 +356,9 @@ static void onTallyOperation(esp_mqtt_event_handle_t event){
     //ESP_LOGW(TAG, "onTallyOperation: ");
     switch (event->data[5]) {
         case 0:
+            //set signaling id
             signaling = event->data[8];
+            //run signaling with new id
             check_signaling();
             break;
         case 1:
@@ -366,6 +368,7 @@ static void onTallyOperation(esp_mqtt_event_handle_t event){
                 return;
             }
             if(check_signaling()){
+                //signaling overwrite all operations
                 return;
             }
             if(event->data[8] == who_im || event->data[8] == 255){
@@ -389,6 +392,7 @@ static void onTallyOperation(esp_mqtt_event_handle_t event){
                 return;
             }
             if(check_signaling()){
+                //signaling overwrite all operations
                 return;
             }
             if(event->data[0] == who_im){
