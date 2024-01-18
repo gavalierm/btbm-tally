@@ -57,7 +57,8 @@
 typedef enum {
     S_WIFI_DISCONNECTED,
     S_WIFI_CONNECTING,
-    S_WIFI_CONNECTED
+    S_WIFI_CONNECTED,
+    S_WIFI_TIMEOUT
     // Add more states as needed
 } WifiState;
 
@@ -65,7 +66,8 @@ typedef enum {
 typedef enum {
     S_MQTT_DISCONNECTED,
     S_MQTT_CONNECTING,
-    S_MQTT_CONNECTED
+    S_MQTT_CONNECTED,
+    S_MQTT_TIMEOUT
     // Add more states as needed
 } MQTTState;
 
@@ -73,7 +75,10 @@ typedef enum {
 typedef enum {
     S_BLE_DISCONNECTED,
     S_BLE_CONNECTING,
-    S_BLE_CONNECTED
+    S_BLE_CONNECTED,
+    S_BLE_PASSCODE,
+    S_BLE_RETRY,
+    S_BLE_TIMEOUT
     // Add more states as needed
 } BLEState;
 /* FreeRTOS event group to signal when we are connected*/
@@ -231,6 +236,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         esp_wifi_connect();
         do_signal_no_period(pink);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        esp_wifi_state = S_WIFI_DISCONNECTED;
         if (s_retry_num < ESP_MAXIMUM_RETRY) {
             do_signal_no_period(pink);
             esp_wifi_state = S_WIFI_CONNECTING;
@@ -239,7 +245,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             ESP_LOGI(TAG, "retry to connect to the AP");
             //nemozem posielat bit pretoze to ukonci proces wifi
         } else {
-            esp_wifi_state = S_WIFI_DISCONNECTED;
+            esp_wifi_state = S_WIFI_TIMEOUT;
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
         ESP_LOGI(TAG,"connect to the AP fail");
@@ -423,84 +429,84 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     esp_mqtt_client_handle_t client = event->client;
     int msg_id;
     switch ((esp_mqtt_event_id_t)event_id) {
-    case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        esp_mqtt_state = S_MQTT_CONNECTED;
-        //esp_mqtt_client_enqueue is non-blocking
-        //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
-        msg_id = esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)derived_mac_addr, sizeof(derived_mac_addr), 0, 0, true); //true means store for non-block
-        //ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-        msg_id = esp_mqtt_client_subscribe(client, "/btmqtt/ccu/raw/upstream", 0);
-        break;
-    case MQTT_EVENT_DISCONNECTED:
-        esp_mqtt_state = S_MQTT_DISCONNECTED;
-        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        //reconnection is fullz auto
-        break;
+        case MQTT_EVENT_CONNECTED:
+            ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+            esp_mqtt_state = S_MQTT_CONNECTED;
+            //esp_mqtt_client_enqueue is non-blocking
+            //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
+            msg_id = esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)derived_mac_addr, sizeof(derived_mac_addr), 0, 0, true); //true means store for non-block
+            //ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+            msg_id = esp_mqtt_client_subscribe(client, "/btmqtt/ccu/raw/upstream", 0);
+            break;
+        case MQTT_EVENT_DISCONNECTED:
+            esp_mqtt_state = S_MQTT_DISCONNECTED;
+            ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+            //reconnection is fullz auto
+            break;
 
-    case MQTT_EVENT_SUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_UNSUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_DATA:
-        esp_mqtt_state = S_MQTT_CONNECTED;
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA on LEN=%d TOPIC=%s\r\n", event->topic_len, event->topic);
-        //because we are subscribed to the one topic, the topic is not relevant
-        if(event->data_len < 8){
-            // the protocol at least 8 bytes
-            ESP_LOGE(TAG, "Too few bytes");
-            return;
-        }
-
-        if(event->data[3] == who_im){
-            // the byte 3 is reserved for nothing and should be 0, we use them for our purposes
-            ESP_LOGW(TAG, "Loopback from myself");
-            return;
-        }
-
-        if(event->data[0] == 255){
-            //broadcast is for me
-            event->data[0] = who_im;
-        }
-        //check data and determine the operation
-        log_hex_data(TAG, (const uint8_t *)event->data, event->data_len);
-        switch (event->data[4]) {
-            case CUSTOM_PROTOCOL_TALLY_CATEGORY:
-                //tally
-                onTallyOperation(event);
-                break;
-            case CUSTOM_PROTOCOL_BLE_CATEGORY:
-                //ble handskage
-                onBLEOperation(event);
-                break;
-            default:
-                //all others data is for CCU
-                onCCUOperation(event);
-                break;
+        case MQTT_EVENT_SUBSCRIBED:
+            ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+            break;
+        case MQTT_EVENT_UNSUBSCRIBED:
+            ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+            break;
+        case MQTT_EVENT_PUBLISHED:
+            ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+            break;
+        case MQTT_EVENT_DATA:
+            esp_mqtt_state = S_MQTT_CONNECTED;
+            ESP_LOGI(TAG, "MQTT_EVENT_DATA on LEN=%d TOPIC=%s\r\n", event->topic_len, event->topic);
+            //because we are subscribed to the one topic, the topic is not relevant
+            if(event->data_len < 8){
+                // the protocol at least 8 bytes
+                ESP_LOGE(TAG, "Too few bytes");
+                return;
             }
-        break;
-    case MQTT_EVENT_ERROR:
-        // TODO catch connecing error to set connecting state
-        //ESP_LOGI(TAG, "MQTT_EVENT_CONNECTING");
-        //esp_wifi_state = S_MQTT_CONNECTING;
-        
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-        if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-            log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
-            log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
-            log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
-            ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
 
-        }
-        break;
-    default:
-        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
-        break;
+            if(event->data[3] == who_im){
+                // the byte 3 is reserved for nothing and should be 0, we use them for our purposes
+                ESP_LOGW(TAG, "Loopback from myself");
+                return;
+            }
+
+            if(event->data[0] == 255){
+                //broadcast is for me
+                event->data[0] = who_im;
+            }
+            //check data and determine the operation
+            log_hex_data(TAG, (const uint8_t *)event->data, event->data_len);
+            switch (event->data[4]) {
+                case CUSTOM_PROTOCOL_TALLY_CATEGORY:
+                    //tally
+                    onTallyOperation(event);
+                    break;
+                case CUSTOM_PROTOCOL_BLE_CATEGORY:
+                    //ble handshakes
+                    onBLEOperation(event);
+                    break;
+                default:
+                    //all others data is for CCU //todo - what data can broke the camera? Some valdation?
+                    onCCUOperation(event);
+                    break;
+                }
+            break;
+        case MQTT_EVENT_ERROR:
+            // TODO catch connecing error to set connecting state
+            //ESP_LOGI(TAG, "MQTT_EVENT_CONNECTING");
+            //esp_wifi_state = S_MQTT_CONNECTING;
+            
+            ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+            if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
+                log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
+                log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
+                log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
+                ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+
+            }
+            break;
+        default:
+            ESP_LOGI(TAG, "Other event id:%d", event->event_id);
+            break;
     }
 }
 
@@ -529,39 +535,42 @@ void stopESP(){
 }
 
 void loopWifi(){
-    if(esp_wifi_state == S_WIFI_CONNECTED){
+    if(esp_wifi_state == S_WIFI_CONNECTED || esp_wifi_state == S_WIFI_TIMEOUT){
         return;
     }
     uint64_t startTime = millis();
-    int timeout = 30;
+    int timeout = 300;
     ESP_LOGE(TAG, "[APP] loopWifi not esgablished ....");
-    while (esp_wifi_state != S_WIFI_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
+    while (esp_wifi_state != S_WIFI_TIMEOUT && esp_wifi_state != S_WIFI_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(pink);
     }
+    esp_wifi_state = S_WIFI_TIMEOUT;
 }
 
 void loopMQTT(){
-    if(esp_mqtt_state == S_MQTT_CONNECTED){
+    if(esp_mqtt_state == S_MQTT_CONNECTED || esp_mqtt_state == S_MQTT_TIMEOUT){
         return;
     }
     uint64_t startTime = millis();
-    int timeout = 30;
+    int timeout = 300;
     ESP_LOGE(TAG, "[APP] loopMQTT not esgablished ....");
-    while (esp_mqtt_state != S_MQTT_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
+    while (esp_mqtt_state != S_MQTT_TIMEOUT && esp_mqtt_state != S_MQTT_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(yellow);
     }
+    esp_mqtt_state = S_MQTT_TIMEOUT;
 }
 
 void loopBLE(){
-    if(esp_ble_state == S_BLE_CONNECTED){
+    if(esp_ble_state == S_BLE_CONNECTED || esp_ble_state == S_BLE_TIMEOUT){
         return;
     }
     uint64_t startTime = millis();
     int timeout = 30;
     ESP_LOGE(TAG, "[APP] loopBLE not esgablished ....");
-    while (esp_ble_state != S_BLE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
+    while (esp_ble_state != S_BLE_TIMEOUT && esp_ble_state != S_BLE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(blue);
     }
+    esp_ble_state = S_BLE_TIMEOUT;
 }
 
 
@@ -632,7 +641,7 @@ void app_main(void)
     while (1) {
         loopWifi();
         loopMQTT(); 
-        //loopBLE(); 
+        loopBLE(); 
         vTaskDelay(pdMS_TO_TICKS(1000)); //vTaskDelay(1000); //check every 1 second
     }
 }
