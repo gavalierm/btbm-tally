@@ -414,10 +414,65 @@ static void onTallyOperation(esp_mqtt_event_handle_t event){
 
 static void onBLEOperation(esp_mqtt_event_handle_t event){
     ESP_LOGW(TAG, "onBLEOperation: ");
+    switch (event->data[5]) {
+    case 0:
+        //notify group
+        //int8
+        //Custom: 0 = disconnected, 1 = connecting, 2 = connected, 3 = need passcode, 4 = timeout
+        //this is only ment for signaling from camera to the operator, from operator to the camera this have no reason
+        break;
+    case 1:
+        //disconnect group
+        //void
+        //sendBLE_Disconnect();
+        break;
+    case 2:
+        //connect group
+        //uInt8
+        if(event->data_len < 14){
+            // the protocol at least 8 bytes
+            ESP_LOGE(TAG, "Too few bytes for CONNECT");
+            return;
+        }
+        int address[6] = {event->data[8],event->data[9],event->data[10],event->data[11],event->data[12],event->data[13]};
+        //sendBLE_Connect(address);
+        break;
+    case 3:
+        //passscode group
+        //int32
+        //sendBLE_Passcode(passcode);
+        break;
+    }
+}
+
+int convertFixed16ToInt(uint8_t* fixed16_bytes) {
+    // Extract integer and fractional parts
+    uint8_t integerPart = fixed16_bytes[0] & 0x1F; // 5 bits for integer part
+    uint16_t fractionalPart = (fixed16_bytes[2] << 8) | fixed16_bytes[1]; // 11 bits for fractional part
+
+    // Combine integer and fractional parts
+    int result = (integerPart << 8) | fractionalPart;
+
+    return result;
 }
 
 static void onCCUOperation(esp_mqtt_event_handle_t event){
     ESP_LOGW(TAG, "onCCUOperation: ");
+
+    //catch CCU command for tally brightness and setup luminance
+    switch (event->data[5] == 5) {
+    case 0:
+    case 1:
+    case 2:
+        //all 0 = fron/rear 1 = front 2 = rear
+        //because is LSB i can reset header data
+        for (int i = 0; i < 8; ++i) {
+            event->data[i] = 0;
+        }
+        luminance = convertFixed16ToInt(event->data); //data is fixed16
+        break;
+    }
+    
     //just forward data to the BLE
     //sendBLE(event->data);
 }
@@ -427,9 +482,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
+            int msg_id;
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
             esp_mqtt_state = S_MQTT_CONNECTED;
             //esp_mqtt_client_enqueue is non-blocking
@@ -441,7 +496,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         case MQTT_EVENT_DISCONNECTED:
             esp_mqtt_state = S_MQTT_DISCONNECTED;
             ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-            //reconnection is fullz auto
+            //reconnection is fully auto
+            //TOTO timeout???
             break;
 
         case MQTT_EVENT_SUBSCRIBED:
@@ -573,7 +629,37 @@ void loopBLE(){
     esp_ble_state = S_BLE_TIMEOUT;
 }
 
+void store_integer_value(const char* key, int value){
+    nvs_handle_t nvs_handle;
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
+    ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, key, value)); //i32 means integer
+    ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+    // Close NVS handle
+    nvs_close(nvs_handle);
+}
 
+int get_integer_value(const char* key) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
+
+    // Read the integer value with the provided key
+    int32_t value;
+    err = nvs_get_i32(nvs_handle, key, &value);
+    if (err == ESP_OK) {
+        //printf("Retrieved value from NVS with key '%s': %d\n", key, value);
+    } else {
+        //printf("Error getting value from NVS: %s\n", esp_err_to_name(err));
+        // Return a default value or an error code
+        value = -1;
+    }
+
+    // Close NVS handle
+    nvs_close(nvs_handle);
+
+    return value;
+}
 
 void app_main(void)
 {
@@ -595,6 +681,11 @@ void app_main(void)
     esp_log_level_set("outbox", ESP_LOG_VERBOSE);
 
     ESP_ERROR_CHECK(nvs_flash_init());
+    const char* key = "luminance";
+    luminance = get_integer_value(key);
+    if(luminance < 0){
+        luminance = 255;
+    }
     //ESP_ERROR_CHECK(esp_netif_init()); /// decalred in wifi init
     //ESP_ERROR_CHECK(esp_event_loop_create_default()); /// declared in wifi init
 
@@ -608,7 +699,7 @@ void app_main(void)
     if (esp_wifi_state != S_WIFI_CONNECTED) {
         loopWifi();
         if (esp_wifi_state != S_WIFI_CONNECTED) {
-            ESP_LOGE(TAG, "[APP] DIE DIE DIE ....");
+            ESP_LOGE(TAG, "[APP] WIFI ... DIE DIE ....");
             stopESP();
             return; //die
         }
@@ -619,7 +710,7 @@ void app_main(void)
     if (esp_mqtt_state != S_MQTT_CONNECTED) {
         loopMQTT();
         if (esp_mqtt_state != S_MQTT_CONNECTED) {
-            ESP_LOGE(TAG, "[APP] DIE DIE DIE ....");
+            ESP_LOGE(TAG, "[APP] MQTT ... DIE DIE ....");
             stopESP();
             return; //die
         }
@@ -630,8 +721,8 @@ void app_main(void)
     if (esp_ble_state != S_BLE_CONNECTED) {
         loopBLE();
         if (esp_ble_state != S_BLE_CONNECTED) {
-            //ESP_LOGE(TAG, "[APP] DIE DIE DIE ....");
-            //stopESP(); //BLE does not break the bank
+            ESP_LOGE(TAG, "[APP] BLE ... DIE DIE ....");
+            //stopESP(); //BLE does not stop ESP, we still have Wifi and MQTT connection, we can use it as TALLY only.
             //return; //die
         }
     }
