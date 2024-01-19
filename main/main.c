@@ -106,6 +106,8 @@ int violet[3] = {255, 0, 255};
 int pink[3] = {255,50,250};
 int yellow[3] = {255, 200, 0};
 
+int last_color[3] = {0, 0, 0};
+
 WifiState esp_wifi_state = S_WIFI_DISCONNECTED;
 MQTTState esp_mqtt_state = S_MQTT_DISCONNECTED;
 BLEState esp_ble_state = S_BLE_DISCONNECTED;
@@ -148,6 +150,9 @@ static void do_signal_color(int red, int green, int blue, int luma){
     green = (green * luma) / 255;
     blue = (blue * luma) / 255;
 
+    last_color[0] = red;
+    last_color[0] = green;
+    last_color[0] = blue;
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
     led_strip_set_pixel(led_strip, 0, green, red, blue); //GBR
     /* Refresh the strip to send data */
@@ -236,7 +241,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         esp_wifi_connect();
         do_signal_no_period(pink);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        esp_wifi_state = S_WIFI_DISCONNECTED;
         if (s_retry_num < ESP_MAXIMUM_RETRY) {
             do_signal_no_period(pink);
             esp_wifi_state = S_WIFI_CONNECTING;
@@ -245,13 +249,13 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             ESP_LOGI(TAG, "retry to connect to the AP");
             //nemozem posielat bit pretoze to ukonci proces wifi
         } else {
-            esp_wifi_state = S_WIFI_TIMEOUT;
+            esp_wifi_state = S_WIFI_DISCONNECTED;
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
-        ESP_LOGI(TAG,"connect to the AP fail");
+        ESP_LOGE(TAG,"connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGW(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         esp_wifi_state = S_WIFI_CONNECTED;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
@@ -459,22 +463,26 @@ int convertFixed16ToInt(uint8_t* fixed16_bytes) {
 static void onCCUOperation(esp_mqtt_event_handle_t event){
     ESP_LOGW(TAG, "onCCUOperation: ");
 
-    //catch CCU command for tally brightness and setup luminance
-    switch (event->data[5] == 5) {
-    case 0:
-    case 1:
-    case 2:
-        //all 0 = fron/rear 1 = front 2 = rear
-        //because is LSB i can reset header data
-        for (int i = 0; i < 8; ++i) {
-            event->data[i] = 0;
-        }
-        luminance = convertFixed16ToInt(event->data); //data is fixed16
-        break;
-    }
-    
+
     //just forward data to the BLE
     //sendBLE(event->data);
+
+    //catch CCU command for tally brightness and setup luminance
+    if(event->data[4] == 5){
+        switch (event->data[5]) {
+            case 0:
+            case 1:
+            case 2:
+                //all 0 = fron/rear 1 = front 2 = rear
+                //because data was send to canera before and data is LSB i can reset header data 
+                for (int i = 0; i < 8; ++i) {
+                    event->data[i] = 0;
+                }
+                luminance = convertFixed16ToInt((uint8_t*)event->data); //data is fixed16
+                do_signal_color(last_color[0],last_color[1],last_color[2],luminance);
+                break;
+            }     
+    }
 }
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -484,14 +492,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     esp_mqtt_client_handle_t client = event->client;
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
-            int msg_id;
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
             esp_mqtt_state = S_MQTT_CONNECTED;
             //esp_mqtt_client_enqueue is non-blocking
             //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
-            msg_id = esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)derived_mac_addr, sizeof(derived_mac_addr), 0, 0, true); //true means store for non-block
+            esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)derived_mac_addr, sizeof(derived_mac_addr), 0, 0, true); //true means store for non-block
             //ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-            msg_id = esp_mqtt_client_subscribe(client, "/btmqtt/ccu/raw/upstream", 0);
+            esp_mqtt_client_subscribe(client, "/btmqtt/ccu/raw/upstream", 0);
             break;
         case MQTT_EVENT_DISCONNECTED:
             esp_mqtt_state = S_MQTT_DISCONNECTED;
@@ -600,7 +607,12 @@ void loopWifi(){
     while (esp_wifi_state != S_WIFI_TIMEOUT && esp_wifi_state != S_WIFI_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(pink);
     }
-    esp_wifi_state = S_WIFI_TIMEOUT;
+    if(esp_wifi_state != S_WIFI_CONNECTED){
+        esp_wifi_state = S_WIFI_TIMEOUT;
+        do_signal(pink);
+    }else{
+        do_signal(gray);
+    }
 }
 
 void loopMQTT(){
@@ -611,9 +623,14 @@ void loopMQTT(){
     int timeout = 300;
     ESP_LOGE(TAG, "[APP] loopMQTT not esgablished ....");
     while (esp_mqtt_state != S_MQTT_TIMEOUT && esp_mqtt_state != S_MQTT_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
-        do_signal_blink_panic(yellow);
+        do_signal_blink_panic(orange);
     }
-    esp_mqtt_state = S_MQTT_TIMEOUT;
+    if(esp_mqtt_state != S_MQTT_CONNECTED){
+        esp_mqtt_state = S_MQTT_TIMEOUT;
+        do_signal(orange);
+    }else{
+        do_signal(gray);
+    }
 }
 
 void loopBLE(){
@@ -626,7 +643,12 @@ void loopBLE(){
     while (esp_ble_state != S_BLE_TIMEOUT && esp_ble_state != S_BLE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(blue);
     }
-    esp_ble_state = S_BLE_TIMEOUT;
+    if(esp_ble_state != S_BLE_CONNECTED){
+        esp_ble_state = S_BLE_TIMEOUT;
+        do_signal(blue);
+    }else{
+        do_signal(gray);
+    }
 }
 
 void store_integer_value(const char* key, int value){
