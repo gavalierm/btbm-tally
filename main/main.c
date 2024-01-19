@@ -93,7 +93,7 @@ uint8_t derived_mac_addr[6] = {0};
 static led_strip_handle_t led_strip;
 
 //signaling color
-int luminance = 255; //at full
+int luminance = 255;
 int black[3] = {255, 255, 255};
 int deep[3] = {10, 10, 10};
 int gray[3] = {50, 60, 40};
@@ -106,7 +106,7 @@ int violet[3] = {255, 0, 255};
 int pink[3] = {255,50,250};
 int yellow[3] = {255, 200, 0};
 
-int last_color[3] = {0, 0, 0};
+int last_color[4] = {0, 0, 0, 0}; //last color stores luminance too
 
 WifiState esp_wifi_state = S_WIFI_DISCONNECTED;
 MQTTState esp_mqtt_state = S_MQTT_DISCONNECTED;
@@ -123,6 +123,39 @@ int signaling = 0;
 // Function to get current time in milliseconds
 uint64_t millis() {
     return esp_timer_get_time() / 1000ULL;
+}
+
+
+void store_integer_value(const char* key, int value){
+    nvs_handle_t nvs_handle;
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
+    ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, key, value)); //i32 means integer
+    ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+    // Close NVS handle
+    nvs_close(nvs_handle);
+}
+
+int get_integer_value(const char* key) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
+
+    // Read the integer value with the provided key
+    int32_t value;
+    err = nvs_get_i32(nvs_handle, key, &value);
+    if (err == ESP_OK) {
+        //printf("Retrieved value from NVS with key '%s': %d\n", key, value);
+    } else {
+        //printf("Error getting value from NVS: %s\n", esp_err_to_name(err));
+        // Return a default value or an error code
+        value = -1;
+    }
+
+    // Close NVS handle
+    nvs_close(nvs_handle);
+
+    return value;
 }
 
 static void log_error_if_nonzero(const char *message, int error_code)
@@ -146,17 +179,26 @@ static void do_signal_color(int red, int green, int blue, int luma){
         luma = 255;
     }
     
+    if(signaling == 0){
+        //last color is set only for non-signaling signals
+        last_color[0] = red;
+        last_color[1] = green;
+        last_color[2] = blue;
+        last_color[3] = luma;
+    }
+
     red = (red * luma) / 255;
     green = (green * luma) / 255;
     blue = (blue * luma) / 255;
 
-    last_color[0] = red;
-    last_color[0] = green;
-    last_color[0] = blue;
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
     led_strip_set_pixel(led_strip, 0, green, red, blue); //GBR
     /* Refresh the strip to send data */
     led_strip_refresh(led_strip);
+}
+
+static void do_signal_last(){
+    do_signal_color(last_color[0],last_color[1],last_color[2],last_color[3]);
 }
 
 static void do_signal(int color[3])
@@ -201,6 +243,50 @@ static void do_signal_no_period(int color[3])
     do_signal(color);
     vTaskDelay(blink_len / portTICK_PERIOD_MS);
     do_signal(black);
+}
+
+
+static bool check_signaling(){
+    switch (signaling) {
+        case 0:
+            // return to last state
+            do_signal_last();
+            return false;
+            break;
+        case 1:
+            do_signal(yellow);
+            return true;
+            break;
+        case 2:
+            //this is one time signal for operator
+            do_signal_blink_panic(yellow);
+            do_signal_blink_panic(yellow);
+            do_signal_blink_panic(yellow);
+            // return to last state
+            do_signal_last();
+            //reset signaling
+            signaling = 0;
+            return true;
+            break;
+        case 3:
+            do_signal(blue);
+            return true;
+            break;
+    }
+    return false;
+}
+
+static void store_signal(int color[3]){
+    last_color[0] = color[0];
+    last_color[1] = color[1];
+    last_color[2] = color[2];
+    last_color[3] = luminance;
+}
+static void store_signal_color(int red, int green, int blue, int luma){
+    last_color[0] = red;
+    last_color[1] = green;
+    last_color[2] = blue;
+    last_color[3] = luma;
 }
 
 static void configure_led(void)
@@ -337,31 +423,6 @@ void log_hex_data(const char *log_tag, const uint8_t *raw_data, size_t raw_data_
     ESP_LOGI(log_tag, "%s", hex_string);
 }
 
-static bool check_signaling(){
-    switch (signaling) {
-        case 0:
-            do_signal(gray);
-            return false;
-            break;
-        case 1:
-            do_signal(yellow);
-            return true;
-            break;
-        case 2:
-            while(1){
-                 do_signal_blink(yellow);
-                 vTaskDelay(1);
-            }
-            return true;
-            break;
-        case 3:
-            do_signal(blue);
-            return true;
-            break;
-    }
-    return false;
-}
-
 static void onTallyOperation(esp_mqtt_event_handle_t event){
     //ESP_LOGW(TAG, "onTallyOperation: ");
     switch (event->data[5]) {
@@ -377,22 +438,33 @@ static void onTallyOperation(esp_mqtt_event_handle_t event){
                 ESP_LOGE(TAG, "Too few bytes for TALLY");
                 return;
             }
-            if(check_signaling()){
-                //signaling overwrite all operations
-                return;
-            }
             if(event->data[8] == who_im || event->data[8] == 255){
                 //pgm
-                ESP_LOGI(TAG, "set TALLY: PGM");
-                do_signal(red);
+                if(check_signaling()){
+                    ESP_LOGW(TAG, "OVERWITED BY SIGNALING > Store TALLY: PGM");
+                }else{
+                    ESP_LOGI(TAG, "Signal TALLY: PGM");
+                    do_signal(red);
+                } 
+                store_signal(red);
             }else if(event->data[9] == who_im || event->data[9] == 255){
                 //pvw
-                ESP_LOGI(TAG, "set TALLY: PVW");
-                do_signal(green);
+                if(check_signaling()){
+                    ESP_LOGW(TAG, "OVERWITED BY SIGNALING > Store TALLY: PVW");
+                }else{
+                    ESP_LOGI(TAG, "Signal TALLY: PVW");
+                    do_signal(green);
+                }
+                store_signal(green);
             }else{
                 //off
-                ESP_LOGI(TAG, "set TALLY: OFF");
-                do_signal(gray); //we signaling off as gray wo know that tally is working even is not in pgm/pvw state
+                if(check_signaling()){
+                    ESP_LOGW(TAG, "OVERWITED BY SIGNALING > Store TALLY: OFF");
+                }else{
+                    ESP_LOGI(TAG, "Signal TALLY: OFF");
+                    do_signal(gray); //we signaling off as gray wo know that tally is working even is not in pgm/pvw state
+                }   
+                store_signal(gray);
             }
             break;
         case 2:
@@ -402,16 +474,15 @@ static void onTallyOperation(esp_mqtt_event_handle_t event){
                 return;
             }
             if(check_signaling()){
-                //signaling overwrite all operations
-                return;
-            }
-            if(event->data[0] == who_im){
+                ESP_LOGW(TAG, "OVERWITED BY SIGNALING > Signal COLOR");
+            }else if(event->data[0] == who_im){
                 //for color we check the destination
-                ESP_LOGI(TAG, "set COLOR: ");
+                ESP_LOGI(TAG, "Signal COLOR: ");
                 // set tally by color / this ignore luminance setting
                 //rgba
-                do_signal_color( event->data[8],  event->data[9],  event->data[10],  event->data[11]);
+                do_signal_color(event->data[8], event->data[9], event->data[10], event->data[11]);
             }
+            store_signal_color(event->data[8], event->data[9], event->data[10], event->data[11]);
             break;
     }
 }
@@ -449,15 +520,27 @@ static void onBLEOperation(esp_mqtt_event_handle_t event){
     }
 }
 
-int convertFixed16ToInt(uint8_t* fixed16_bytes) {
-    // Extract integer and fractional parts
-    uint8_t integerPart = fixed16_bytes[0] & 0x1F; // 5 bits for integer part
-    uint16_t fractionalPart = (fixed16_bytes[2] << 8) | fixed16_bytes[1]; // 11 bits for fractional part
+float convertFixed16ToFloat(uint8_t* packet) {
+    // Extracting payload
+    uint16_t payloadValue = (packet[9] << 8) | packet[8];
 
-    // Combine integer and fractional parts
-    int result = (integerPart << 8) | fractionalPart;
+    // Sign extension for signed 16-bit integer
+    int16_t signedValue = (int16_t)payloadValue;
 
-    return result;
+    // Converting to float with scaling factor 2^11
+    float floatValue = signedValue / 2048.0;
+    ESP_LOGI(TAG, "Converted FLOAT Value (fixed16): %f\n", floatValue);
+    return floatValue;
+}
+
+int convertFixed16ToInt(uint8_t* packet) {
+    // Extract fixed16 value from the packet
+    float floatValue = convertFixed16ToFloat(packet);
+
+    // Convert the float value to an integer in the range [-16, 15]
+    int intValue = (int)(floatValue * 255.0);
+    ESP_LOGI(TAG, "Converted INT Value (fixed16): %d\n", intValue);
+    return intValue;
 }
 
 static void onCCUOperation(esp_mqtt_event_handle_t event){
@@ -469,17 +552,22 @@ static void onCCUOperation(esp_mqtt_event_handle_t event){
 
     //catch CCU command for tally brightness and setup luminance
     if(event->data[4] == 5){
+        ESP_LOGW(TAG, "CATCHING TALLY LUMA: ");
         switch (event->data[5]) {
             case 0:
             case 1:
             case 2:
                 //all 0 = fron/rear 1 = front 2 = rear
-                //because data was send to canera before and data is LSB i can reset header data 
-                for (int i = 0; i < 8; ++i) {
-                    event->data[i] = 0;
-                }
                 luminance = convertFixed16ToInt((uint8_t*)event->data); //data is fixed16
-                do_signal_color(last_color[0],last_color[1],last_color[2],luminance);
+                if(luminance < 31){
+                    luminance = 31;
+                }
+                if(luminance > 255){
+                    luminance = 255;
+                }
+                store_integer_value("luminance", luminance);
+                store_signal_color(last_color[0],last_color[1],last_color[2],luminance);
+                do_signal_last();
                 break;
             }     
     }
@@ -562,7 +650,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
                 log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
                 log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
-                log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
+                log_error_if_nonzero("captured as transport's socket errno", event->error_handle->esp_transport_sock_errno);
                 ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
 
             }
@@ -651,38 +739,6 @@ void loopBLE(){
     }
 }
 
-void store_integer_value(const char* key, int value){
-    nvs_handle_t nvs_handle;
-    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
-    ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, key, value)); //i32 means integer
-    ESP_ERROR_CHECK(nvs_commit(nvs_handle));
-    // Close NVS handle
-    nvs_close(nvs_handle);
-}
-
-int get_integer_value(const char* key) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
-
-    // Read the integer value with the provided key
-    int32_t value;
-    err = nvs_get_i32(nvs_handle, key, &value);
-    if (err == ESP_OK) {
-        //printf("Retrieved value from NVS with key '%s': %d\n", key, value);
-    } else {
-        //printf("Error getting value from NVS: %s\n", esp_err_to_name(err));
-        // Return a default value or an error code
-        value = -1;
-    }
-
-    // Close NVS handle
-    nvs_close(nvs_handle);
-
-    return value;
-}
-
 void app_main(void)
 {
 
@@ -703,17 +759,13 @@ void app_main(void)
     esp_log_level_set("outbox", ESP_LOG_VERBOSE);
 
     ESP_ERROR_CHECK(nvs_flash_init());
-    const char* key = "luminance";
-    luminance = get_integer_value(key);
-    if(luminance < 0){
-        luminance = 255;
-    }
     //ESP_ERROR_CHECK(esp_netif_init()); /// decalred in wifi init
     //ESP_ERROR_CHECK(esp_event_loop_create_default()); /// declared in wifi init
 
     /* Configure the peripheral according to the LED type */
     configure_led();
-    do_signal(gray);
+    store_signal(gray); //set default last color to gray
+    do_signal_last();
 
 
     wifi_init_sta();
@@ -749,6 +801,14 @@ void app_main(void)
         }
     }
     
+    //boot up luminance is at full
+    //after bootup load stored luminance
+    const char* key = "luminance";
+    luminance = get_integer_value(key);
+    if(luminance < 0){
+        luminance = 255;
+    }
+
     check_signaling();
 
     while (1) {
