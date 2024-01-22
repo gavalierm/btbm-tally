@@ -519,6 +519,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/nimble_central_utils/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/main/cmake_install.cmake")
 endif()
 

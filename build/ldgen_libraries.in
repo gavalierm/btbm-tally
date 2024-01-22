@@ -81,4 +81,5 @@ $<TARGET_FILE:__idf_touch_element>
 $<TARGET_FILE:__idf_usb>
 $<TARGET_FILE:__idf_wifi_provisioning>
 $<TARGET_FILE:__idf_espressif__led_strip>
+$<TARGET_FILE:__idf_nimble_central_utils>
 $<TARGET_FILE:__idf_main>

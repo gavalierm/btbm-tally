@@ -17,7 +17,6 @@
  * under the License.
  */
 
-
 #ifndef H_BLECENT_
 #define H_BLECENT_
 

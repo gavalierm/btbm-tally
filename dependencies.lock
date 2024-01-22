@@ -10,6 +10,12 @@ dependencies:
     source:
       type: idf
     version: 5.3.0
-manifest_hash: d8dbb24be09d180f1e60d67bc5fcc5467318750d77a4534fbeed2d4c330e10bf
+  nimble_central_utils:
+    component_hash: null
+    source:
+      path: /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/examples/bluetooth/nimble/common/nimble_central_utils
+      type: local
+    version: '*'
+manifest_hash: 69939582ff2a717f7d89671f73487c40faf36b73366e44c3696476bfdf54fa36
 target: esp32s3
 version: 1.0.0

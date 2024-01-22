@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -29,10 +28,23 @@
 
 #include "mqtt_client.h"
 
+// BLE https://github.com/espressif/esp-idf/blob/master/examples/bluetooth/nimble/blecent/tutorial/blecent_walkthrough.md
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "host/ble_hs.h"
+#include "host/ble_sm.h"
+#include "host/util/util.h"
+#include "console/console.h"
+#include "services/gap/ble_svc_gap.h"
+#include "gatt/blecent.h"
+
 #include "driver/gpio.h"
 #include "led_strip.h"
 
 #define LOGGING 1
+
+#define MQTT_DOWNSTREAM_TOPIC "/btmqtt/ccu/raw/downstream"
+#define MQTT_UPSTREAM_TOPIC "/btmqtt/ccu/raw/upstream"
 
 #define ESP_WIFI_SSID       CONFIG_ESP_WIFI_SSID
 #define ESP_WIFI_PASS       CONFIG_ESP_WIFI_PASSWORD
@@ -83,6 +95,14 @@ typedef enum {
     S_BLE_TIMEOUT
     // Add more states as needed
 } BLEState;
+
+// Define the enumeration
+typedef enum {
+    S_WHOIM_UNDEFINED,
+    S_WHOIM_DEFINED,
+    S_WHOIM_TIMEOUT
+    // Add more states as needed
+} WHOIMState;
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -113,6 +133,7 @@ int last_color[4] = {0, 0, 0, 0}; //last color stores luminance too
 WifiState esp_wifi_state = S_WIFI_DISCONNECTED;
 MQTTState esp_mqtt_state = S_MQTT_DISCONNECTED;
 BLEState esp_ble_state = S_BLE_DISCONNECTED;
+WHOIMState esp_whoim_state = S_WHOIM_UNDEFINED;
 
 // this value have to be set from BLE handshaking
 // this value determine which device this ESP represnets
@@ -121,6 +142,9 @@ BLEState esp_ble_state = S_BLE_DISCONNECTED;
 // we start as 255 to catch all messages, after MQTT handskage we will wait to "Who I M" message from controller
 int who_im = 255; //255 means all data is for me
 int signaling = 0;
+
+esp_mqtt_client_handle_t mqtt_client;
+static uint16_t conn_handle = BLE_HS_CONN_HANDLE_NONE;
 
 // Function to get current time in milliseconds
 uint64_t millis() {
@@ -318,6 +342,34 @@ static void configure_led(void)
     led_strip_clear(led_strip);
 }
 
+// Declare the function before using it
+void mqttNotify(uint8_t id) {
+
+    const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x00, 0x00, 0x00, id};
+
+    ESP_LOGW(TAG,"needPasskeyNofify");
+    if(esp_mqtt_state != S_MQTT_CONNECTED){
+        ESP_LOGE(TAG,"needPasskeyNofify MQTT NOT CONNECTED");
+        return;
+    }
+    esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0);
+}
+
+void sendBLE_Passkey(uint32_t passkey){
+            // Prepare the structure with the passkey
+        struct ble_sm_io io;
+        io.action = BLE_SM_IOACT_INPUT;
+        io.passkey = passkey;
+
+        ble_sm_inject_io(conn_handle, &io);
+    //esp_ble_passkey_reply(mqtt_client->ble_security.ble_req.bd_addr, true, passkey);
+}
+
+////////
+// im trying to separate file for BT for better orientation
+#include "gatt/gatt_client.c"
+////////
+
 /*
  * WIFI
  *
@@ -402,17 +454,6 @@ static void  wifi_init_sta(void)
     vEventGroupDelete(s_wifi_event_group);
 }
 
-/*
- * @brief Event handler registered to receive MQTT events
- *
- *  This function is called by the MQTT client event loop.
- *
- * @param handler_args user data registered to the event.
- * @param base Event base for the handler(always MQTT Base in this example).
- * @param event_id The id for the received event.
- * @param event_data The data for the event, esp_mqtt_event_handle_t.
- */
-
 // Function to convert raw data to a hexadecimal string with spaces and log using ESP_LOGI
 void log_hex_data(const char *log_tag, const uint8_t *raw_data, size_t raw_data_len) {
     char hex_string[(raw_data_len * 3) + 1]; // Each byte takes 3 characters (2 hex + 1 space)
@@ -423,6 +464,18 @@ void log_hex_data(const char *log_tag, const uint8_t *raw_data, size_t raw_data_
     }
 
     ESP_LOGI(log_tag, "%s", hex_string);
+}
+
+uint32_t hexPayloadToUint32(const char *packet) {
+    // Assuming payload is in little-endian order
+    const uint8_t *payload = (const uint8_t*)(packet + 8); // Skip the first 8 bytes (headers)
+    uint32_t result = 0;
+
+    for (int i = 3; i >= 0; --i) {
+        result = (result << 8) | payload[i];
+    }
+
+    return result;
 }
 
 static void onTallyOperation(esp_mqtt_event_handle_t event){
@@ -515,8 +568,13 @@ static void onBLEOperation(esp_mqtt_event_handle_t event){
         //sendBLE_Connect(address);
         break;
     case 3:
+        ESP_LOGW(TAG, "PASSSSSSSSSSSSS KEY");
         //passscode group
-        //int32
+        uint32_t result = hexPayloadToUint32(event->data);
+
+        ESP_LOGW(TAG, "Converted PASSSSSSSSSSSSS KEY value: %06u\n", (unsigned int)result);
+        //{event->data[8],event->data[9],event->data[10],event->data[11],event->data[12],event->data[13]}
+        sendBLE_Passkey(result);
         //sendBLE_Passcode(passcode);
         break;
     }
@@ -588,7 +646,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
             esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)derived_mac_addr, sizeof(derived_mac_addr), 0, 0, true); //true means store for non-block
             //ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-            esp_mqtt_client_subscribe(client, "/btmqtt/ccu/raw/upstream", 0);
+            esp_mqtt_client_subscribe(client, MQTT_UPSTREAM_TOPIC, 0);
             break;
         case MQTT_EVENT_DISCONNECTED:
             esp_mqtt_state = S_MQTT_DISCONNECTED;
@@ -669,16 +727,18 @@ static void mqtt_app_start(void)
         .broker.address.uri = ESP_MQTT_HOST_URI,
     };
 
-    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+    //esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+    mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(client);
+    esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_start(mqtt_client);
     esp_mqtt_state = S_MQTT_CONNECTING;
 }
 
 
 static void ble_app_start(void){
     ESP_LOGW(TAG, "[APP] Starting BLE sequence ....");
+    BLEClient_app_main();
 }
 
 void stopESP(){
@@ -693,7 +753,7 @@ void loopWifi(){
     }
     uint64_t startTime = millis();
     int timeout = 300;
-    ESP_LOGE(TAG, "[APP] loopWifi not esgablished ....");
+    ESP_LOGE(TAG, "[APP] loopWifi not established ....");
     while (esp_wifi_state != S_WIFI_TIMEOUT && esp_wifi_state != S_WIFI_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(pink);
     }
@@ -711,7 +771,7 @@ void loopMQTT(){
     }
     uint64_t startTime = millis();
     int timeout = 300;
-    ESP_LOGE(TAG, "[APP] loopMQTT not esgablished ....");
+    ESP_LOGE(TAG, "[APP] loopMQTT not established ....");
     while (esp_mqtt_state != S_MQTT_TIMEOUT && esp_mqtt_state != S_MQTT_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(orange);
     }
@@ -729,13 +789,31 @@ void loopBLE(){
     }
     uint64_t startTime = millis();
     int timeout = 30;
-    ESP_LOGE(TAG, "[APP] loopBLE not esgablished ....");
+    ESP_LOGE(TAG, "[APP] loopBLE not established ....");
     while (esp_ble_state != S_BLE_TIMEOUT && esp_ble_state != S_BLE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(blue);
     }
     if(esp_ble_state != S_BLE_CONNECTED){
         esp_ble_state = S_BLE_TIMEOUT;
         do_signal(blue);
+    }else{
+        do_signal(gray);
+    }
+}
+
+void loopWhoim(){
+    if(who_im != 255 || esp_whoim_state == S_WHOIM_TIMEOUT){
+        return;
+    }
+    uint64_t startTime = millis();
+    int timeout = 3;
+    ESP_LOGE(TAG, "[APP] loopWhoim not established ....");
+    while (esp_whoim_state != S_WHOIM_TIMEOUT && who_im == 255 && ( (millis() - startTime) < (timeout * 1000) ) ) {
+        do_signal_blink_panic(violet);
+    }
+    if(who_im == 255){
+        esp_whoim_state = S_WHOIM_TIMEOUT;
+        do_signal(violet);
     }else{
         do_signal(gray);
     }
@@ -765,7 +843,12 @@ void app_main(void)
     }
 
 
-    ESP_ERROR_CHECK(nvs_flash_init());
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
     //ESP_ERROR_CHECK(esp_netif_init()); /// decalred in wifi init
     //ESP_ERROR_CHECK(esp_event_loop_create_default()); /// declared in wifi init
 
@@ -774,7 +857,15 @@ void app_main(void)
     store_signal(gray); //set default last color to gray
     do_signal_last();
 
+    //boot up luminance is at full
+    //after bootup load stored luminance
+    const char* key = "luminance";
+    luminance = get_integer_value(key);
+    if(luminance < 0){
+        luminance = 255;
+    }
 
+    
     wifi_init_sta();
     
     if (esp_wifi_state != S_WIFI_CONNECTED) {
@@ -796,32 +887,28 @@ void app_main(void)
             return; //die
         }
     }
+    
+    loopWhoim();
 
     ble_app_start();
 
     if (esp_ble_state != S_BLE_CONNECTED) {
         loopBLE();
         if (esp_ble_state != S_BLE_CONNECTED) {
-            ESP_LOGE(TAG, "[APP] BLE ... DIE DIE ....");
+            //ESP_LOGE(TAG, "[APP] BLE ... DIE DIE ....");
             //stopESP(); //BLE does not stop ESP, we still have Wifi and MQTT connection, we can use it as TALLY only.
             //return; //die
+            //ble_stack_deinit();
         }
-    }
-    
-    //boot up luminance is at full
-    //after bootup load stored luminance
-    const char* key = "luminance";
-    luminance = get_integer_value(key);
-    if(luminance < 0){
-        luminance = 255;
     }
 
     check_signaling();
 
     while (1) {
+        loopWhoim();
         loopWifi();
         loopMQTT(); 
-        loopBLE(); 
+        //loopBLE(); 
         vTaskDelay(pdMS_TO_TICKS(1000)); //vTaskDelay(1000); //check every 1 second
     }
 }
