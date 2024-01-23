@@ -205,7 +205,7 @@ static void blecent_write_to_outgoing(const uint8_t *event_data){
         return;
     }
     //rc = ble_gattc_write_no_rsp_flat(ble_connection_handle, ble_write_handle, event_data, data_len); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
-    rc = ble_gattc_write_flat(ble_connection_handle, ble_write_handle, event_data, data_len, NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
+    rc = ble_gattc_write_flat(ble_connection_handle, ble_write_handle, event_data, data_len, blecent_after_write, OutgoingCameraControl_UUID); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
     if (rc != 0) {
         MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
     }

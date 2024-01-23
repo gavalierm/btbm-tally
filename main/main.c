@@ -138,9 +138,9 @@ void BLE_notifyMqtt(uint8_t id) {
     //struct is consitent we change only last byte
     const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x00, 0x00, 0x00, id};
 
-    ESP_LOGW(APP_TAG,"needPasskeyNofify");
+    ESP_LOGW(BLE_TAG,"needPasskeyNofify");
     if(esp_mqtt_state != STATE_CONNECTED){
-        ESP_LOGE(APP_TAG,"needPasskeyNofify MQTT NOT CONNECTED");
+        ESP_LOGE(BLE_TAG,"needPasskeyNofify MQTT NOT CONNECTED");
         return;
     }
     esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0);
@@ -167,7 +167,7 @@ void BLE_onReceive(const struct os_mbuf *om){
         // Free the allocated buffer
         free(data);
     } else {
-        ESP_LOGE(APP_TAG, "Failed to allocate memory for data");
+        ESP_LOGE(BLE_TAG, "Failed to allocate memory for data");
     }
 }
 
@@ -218,10 +218,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             esp_wifi_state = STATE_DISCONNECTED;
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
-        ESP_LOGE(APP_TAG,"connect to the AP fail");
+        ESP_LOGE(WIFI_TAG,"connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGW(APP_TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGW(WIFI_TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         esp_wifi_state = STATE_CONNECTED;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
@@ -258,7 +258,7 @@ static void  wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(APP_TAG, "wifi_init_sta finished.");
+    ESP_LOGI(WIFI_TAG, "wifi_init_sta finished.");
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by wifi_event_handler() (see above) */
@@ -267,11 +267,11 @@ static void  wifi_init_sta(void)
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(APP_TAG, "connected to ap SSID:%s password:%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
+        ESP_LOGI(WIFI_TAG, "connected to ap SSID:%s password:%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
     } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(APP_TAG, "Failed to connect to SSID:%s, password:%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
+        ESP_LOGI(WIFI_TAG, "Failed to connect to SSID:%s, password:%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
     } else {
-        ESP_LOGE(APP_TAG, "UNEXPECTED EVENT");
+        ESP_LOGE(WIFI_TAG, "UNEXPECTED EVENT");
     }
 
     /* The event will not be processed after unregister */
@@ -414,12 +414,12 @@ static void MQTT_onReceiveCCU(esp_mqtt_event_handle_t event){
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ESP_LOGD(APP_TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
+    ESP_LOGD(MQTT_TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(APP_TAG, "MQTT_EVENT_CONNECTED");
+            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_CONNECTED");
             esp_mqtt_state = STATE_CONNECTED;
             //esp_mqtt_client_enqueue is non-blocking
             //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
@@ -435,27 +435,27 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
 
         case MQTT_EVENT_SUBSCRIBED:
-            ESP_LOGI(APP_TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
             break;
         case MQTT_EVENT_UNSUBSCRIBED:
-            ESP_LOGI(APP_TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
             break;
         case MQTT_EVENT_PUBLISHED:
-            ESP_LOGI(APP_TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
             break;
         case MQTT_EVENT_DATA:
             esp_mqtt_state = STATE_CONNECTED;
-            ESP_LOGI(APP_TAG, "MQTT_EVENT_DATA on LEN=%d TOPIC=%s\r\n", event->topic_len, event->topic);
+            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_DATA on LEN=%d TOPIC=%s\r\n", event->topic_len, event->topic);
             //because we are subscribed to the one topic, the topic is not relevant
             if(event->data_len < 8){
                 // the protocol at least 8 bytes
-                ESP_LOGE(APP_TAG, "Too few bytes");
+                ESP_LOGE(MQTT_TAG, "Too few bytes");
                 return;
             }
 
             if(event->data[3] == who_im){
                 // the byte 3 is reserved for nothing and should be 0, we use them for our purposes
-                ESP_LOGW(APP_TAG, "Loopback from myself");
+                ESP_LOGW(MQTT_TAG, "Loopback from myself");
                 return;
             }
 
@@ -464,7 +464,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 event->data[0] = who_im;
             }
             //check data and determine the operation
-            log_hex_data(APP_TAG, (const uint8_t *)event->data, event->data_len);
+            log_hex_data(MQTT_TAG, (const uint8_t *)event->data, event->data_len);
             switch (event->data[4]) {
                 case CUSTOM_PROTOCOL_TALLY_CATEGORY:
                     //tally
@@ -485,7 +485,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             //ESP_LOGI(APP_TAG, "MQTT_EVENT_CONNECTING");
             //esp_wifi_state = STATE_CONNECTING;
             
-            ESP_LOGI(APP_TAG, "MQTT_EVENT_ERROR");
+            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_ERROR");
             if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
                 log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
                 log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
@@ -495,7 +495,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             }
             break;
         default:
-            ESP_LOGI(APP_TAG, "Other event id:%d", event->event_id);
+            ESP_LOGI(MQTT_TAG, "Other event id:%d", event->event_id);
             break;
     }
 }
