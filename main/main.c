@@ -127,6 +127,7 @@ int signaling = 0;
 
 esp_mqtt_client_handle_t mqtt_client;
 static uint16_t ble_connection_handle = BLE_HS_CONN_HANDLE_NONE;
+static uint16_t ble_write_handle = BLE_HS_CONN_HANDLE_NONE;
 
 
 #include "utils.c"
@@ -145,17 +146,6 @@ void BLE_notifyMqtt(uint8_t id) {
     esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0);
 }
 
-void BLE_sendPasskey(uint32_t passkey){
-    if(esp_ble_state != STATE_CONNECTED){
-        return;
-    }
-    // Prepare the structure with the passkey
-    struct ble_sm_io io;
-    io.action = BLE_SM_IOACT_INPUT;
-    io.passkey = passkey;
-    ble_sm_inject_io(ble_connection_handle, &io);
-}
-
 void BLE_onReceive(const struct os_mbuf *om){
     if(esp_mqtt_state != STATE_CONNECTED){
         return;
@@ -165,6 +155,9 @@ void BLE_onReceive(const struct os_mbuf *om){
     
     if (data != NULL) {
         os_mbuf_copydata(om, 0, data_len, data);
+        if(data[5] == 9){
+            ESP_LOGW(BLE_TAG,"DATA ID 9");
+        }
 
         // send data to mqtt using enqueue whis is async-like behavior
         // sending from camera to the operator do not have priorty
@@ -180,12 +173,27 @@ void BLE_onReceive(const struct os_mbuf *om){
 ////////
 #include "gatt/gatt_client.c"
 ////////
-void BLE_sendConnect(const uint8_t *addr){
-    connect_becouse_interesting(addr);
+void BLE_sendPasskey(uint32_t passkey){
+    if(esp_ble_state != STATE_CONNECTING && esp_ble_state != STATE_PASSCODE){
+        ESP_LOGE(APP_TAG,"Passkey STATE_CONNECTING ? rc=%d", esp_ble_state);
+        return;
+    }
+    // Prepare the structure with the passkey
+    struct ble_sm_io io;
+    io.action = BLE_SM_IOACT_INPUT;
+    io.passkey = passkey;
+    ble_sm_inject_io(ble_connection_handle, &io);
+}
+
+void BLE_sendConnect(uint8_t *addr){
+    connect_to_addr(addr);
 }
 
 void BLE_sendDisconnect(){
     ble_gap_terminate(ble_connection_handle, BLE_ERR_REM_USER_CONN_TERM);
+}
+void BLE_sendData(uint8_t *data){
+    blecent_write_to_outgoind(data);
 }
 /*
  * WIFI
@@ -558,7 +566,7 @@ void loopBLE(){
         return;
     }
     uint64_t startTime = millis();
-    int timeout = 30;
+    int timeout = 300;
     ESP_LOGE(APP_TAG, "loopBLE not established ....");
     while (esp_ble_state != STATE_TIMEOUT && esp_ble_state != STATE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(blue);
@@ -566,6 +574,7 @@ void loopBLE(){
     if(esp_ble_state != STATE_CONNECTED){
         esp_ble_state = STATE_TIMEOUT;
         do_signal(blue);
+        //terminate the BLE?
     }else{
         do_signal(gray);
     }
@@ -576,7 +585,7 @@ void loopWhoim(){
         return;
     }
     uint64_t startTime = millis();
-    int timeout = 30;
+    int timeout = 3;
     ESP_LOGE(APP_TAG, "loopWhoim not established ....");
     while ( who_im == 255 && esp_whoim_state != STATE_TIMEOUT && esp_whoim_state != STATE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(violet);
@@ -692,7 +701,7 @@ void app_main(void)
             //stopESP(); //BLE does not stop ESP, we still have Wifi and MQTT connection, we can use it as TALLY only.
             //return; //die
             //BLE is not connected in time so we deinti the stack to save some CPU/RAM
-            ble_stack_deinit();
+            //ble_stack_deinit();
         }
     }
 

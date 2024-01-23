@@ -37,7 +37,7 @@ static const ble_uuid_t * ProtocolVersion_UUID = BLE_UUID128_DECLARE(0x06,0x27,0
 static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 static uint8_t peer_addr[6];
 
-ble_device_t discovered_devices[MAX_DISC_DEVICES + 1];
+uint8_t discovered_devices[MAX_DISC_DEVICES + 1];
 int discovered_devices_count = 0;
 
 void ble_store_config_init(void);
@@ -91,16 +91,6 @@ blecent_print_conn_desc(struct ble_gap_conn_desc *desc)
                 desc->sec_state.encrypted,
                 desc->sec_state.authenticated,
                 desc->sec_state.bonded);
-}
-
-void print_discovered_devices() {
-    ESP_LOGI("DEVICE_LIST", "Number of devices: %d", discovered_devices_count);
-    for (int i = 0; i < MAX_DISC_DEVICES; i++) {
-        if(discovered_devices[i].addr[0] == 0x00 && discovered_devices[i].addr[1] == 0x00 && discovered_devices[i].addr[2] == 0x00 && discovered_devices[i].addr[3] == 0x00 && discovered_devices[i].addr[4] == 0x00 && discovered_devices[i].addr[5] == 0x00){
-            continue;
-        }
-        ESP_LOGI("DEVICE_LIST", "Device %d: %02X:%02X:%02X:%02X:%02X:%02X", i + 1, discovered_devices[i].addr[0], discovered_devices[i].addr[1], discovered_devices[i].addr[2], discovered_devices[i].addr[3], discovered_devices[i].addr[4], discovered_devices[i].addr[5]);
-    }
 }
 
 static void blecent_log_mbuf(const struct os_mbuf *om){
@@ -187,6 +177,19 @@ err:
 
 }
 
+static void blecent_write_to_outgoind(uint8_t *data){
+    int rc;
+    MODLOG_DFLT(WARN, "[ BLECENT ] blecent_write_to_outgoind\n");
+    if(data == NULL || sizeof(data) < 8){ //at least 8 bytes
+        return;
+    }
+    //int8_t value[] = {0xFF,0x05,0x00,0x00,0x01,0x0A,0x01,0x00,0x00,0x00,0x00,0x00};
+    rc = ble_gattc_write_flat(ble_connection_handle, ble_write_handle, data, sizeof(data), NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
+    if (rc != 0) {
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
+    }
+}
+
 static int blecent_subscribe_to(const struct peer *peer, const ble_uuid_t *service_uuid_to_subscribe, bool notifications){
 
     MODLOG_DFLT(WARN, "[ BLECENT ] START: blecent_subscribe_to\n");
@@ -222,70 +225,6 @@ static int blecent_subscribe_to(const struct peer *peer, const ble_uuid_t *servi
 err:
     ESP_LOGE(BLE_TAG,"Terminate the connection.");
     return 1;
-    /* Terminate the connection. */
-    ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-}
-
-static void establishController(const struct peer *peer)
-{
-    //FF050000010A010002000000
-    //BLE_GATT_CHR_F_NOTIFY
-
-
-    ESP_LOGW(BLE_TAG, "\n\n\nestablishController\n\n\n");
-
-    //uint8_t value[2];
-    if (blecent_subscribe_to(peer, IncomingCameraControl_UUID, true) != 0) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: IncomingCameraControl_UUID");
-        //goto err;
-    }else{
-        MODLOG_DFLT(WARN,"OK: Subscribed; IncomingCameraControl_UUID");
-    }
-
-    if (blecent_subscribe_to(peer, Timecode_UUID, true) != 0) {
-        MODLOG_DFLT(ERROR,"Error: Timecode_UUID");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN,"OK: Subscribed; Timecode_UUID");
-    }
-    return;
-    if (blecent_subscribe_to(peer, OutgoingCameraControl_UUID, true) != 0) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: OutgoingCameraControl_UUID");
-        //goto err;
-    }else{
-        MODLOG_DFLT(WARN,"OK: Subscribed; OutgoingCameraControl_UUID");
-    }
-        
-    // rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, blecent_subscribe, (void*)Timecode_UUID);
-    ESP_LOGI(BLE_TAG, "UUID MATCH UUID MATCH UUID MATCH UUID MATCH UUID MATCH ");
-
-    const struct peer_chr *chr;
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, DeviceName_UUID);
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't have DeviceName_UUID\n");
-        goto err;
-    }
-    //vTaskDelay(1000);
-    /* Write 1 byte to the new characteristic to test if it notifies after subscribing */
-    const char *string_to_write = ble_svc_gap_device_name();
-    uint16_t data_len = strlen(string_to_write);
-    int rc;
-    rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, string_to_write, data_len, blecent_after_write,  DeviceName_UUID); //, blecent_on_custom_write, NULL);
-    if (rc != 0) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to write to DeviceName_UUID; rc=%d\n", rc);
-        goto err;
-    }
-
-    rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, string_to_write, data_len, blecent_after_write,  DeviceName_UUID); //, blecent_on_custom_write, NULL);
-    if (rc != 0) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to write to DeviceName_UUID; rc=%d\n", rc);
-        goto err;
-    }
-
-    return;
-err:
-    ESP_LOGE(BLE_TAG,"Terminate the connection.");
-    return;
     /* Terminate the connection. */
     ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
 }
@@ -334,135 +273,28 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     // subscribe to the camera status
     //true means notifications without ACK
     if (blecent_subscribe_to(peer, Timecode_UUID, true) != 0) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: IncomingCameraControl_UUID");
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Timecode_UUID");
         //goto err;
     }else{
-        MODLOG_DFLT(WARN,"OK: Subscribed; IncomingCameraControl_UUID");
+        MODLOG_DFLT(WARN,"OK: Subscribed; Timecode_UUID");
     }
+    // subscribe to the camera status
+    //true means notifications without ACK
     /*
-    // send 0x01 to the camera accroding to protocol
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, CameraStatus_UUID);
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support CameraStatus_UUID\n");
-        goto err;
+    if (blecent_subscribe_to(peer, CameraStatus_UUID, true) != 0) {
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: CameraStatus_UUID");
+        //goto err;
     }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE CameraStatus_UUID\n");
-        int8_t value = {0x01};
-        rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, &value, sizeof(value), blecent_after_write, NULL);
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; CameraStatus_UUID rc=%d", rc);
-            goto err;
-        }
+        MODLOG_DFLT(WARN,"OK: Subscribed; CameraStatus_UUID");
     }
-    // send test data to the ccu
-    vTaskDelay(5000);
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, OutgoingCameraControl_UUID);
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support OutgoingCameraControl_UUID\n");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE OutgoingCameraControl_UUID\n");
-        int8_t value[] = {0xFF,0x05,0x00,0x00,0x01,0x0A,0x01,0x00,0x02,0x00,0x00,0x00};
-        rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, value, sizeof(value), NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
-            goto err;
-        }
-    }
-
-    vTaskDelay(5000);
-    // send test data to the ccu
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, OutgoingCameraControl_UUID);
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support OutgoingCameraControl_UUID\n");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE OutgoingCameraControl_UUID\n");
-        int8_t value[] = {0xFF,0x05,0x00,0x00,0x01,0x0A,0x01,0x00,0x00,0x00,0x00,0x00};
-        rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, value, sizeof(value), NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
-            goto err;
-        }
-    }
-
-    vTaskDelay(5000);
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, OutgoingCameraControl_UUID);
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support OutgoingCameraControl_UUID\n");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE OutgoingCameraControl_UUID\n");
-        int8_t value[] = {0xFF,0x05,0x00,0x00,0x01,0x0A,0x01,0x00,0x02,0x00,0x00,0x00};
-        rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, value, sizeof(value), NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
-            goto err;
-        }
-    }
-
-    vTaskDelay(5000);
-    // send test data to the ccu
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, OutgoingCameraControl_UUID);
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support OutgoingCameraControl_UUID\n");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE OutgoingCameraControl_UUID\n");
-        int8_t value[] = {0xFF,0x05,0x00,0x00,0x01,0x0A,0x01,0x00,0x00,0x00,0x00,0x00};
-        rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, value, sizeof(value), NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
-            goto err;
-        }
-    }
-
-    return;
-
-    chr = peer_chr_find_uuid(peer, BLE_UUID16_DECLARE(DeviceInformation_UUID), BLE_UUID16_DECLARE(CameraManufacturer_UUID));
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support CameraManufacturer_UUID\n");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE CameraManufacturer_UUID\n");
-        rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, blecent_read_log, NULL);
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to read characteristic; CameraManufacturer_UUID rc=%d", rc);
-            goto err;
-        }
-    }
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, ProtocolVersion_UUID);
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support ProtocolVersion_UUID\n");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE ProtocolVersion_UUID\n");
-        rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, blecent_read_log, NULL);
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to read characteristic; ProtocolVersion_UUID rc=%d", rc);
-            goto err;
-        }
-    }
-    chr = peer_chr_find_uuid(peer, BLE_UUID16_DECLARE(DeviceInformation_UUID), BLE_UUID16_DECLARE(CameraModel_UUID));
-    if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support CameraModel_UUID\n");
-        goto err;
-    }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE CameraModel_UUID\n");
-        rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, blecent_read_log, NULL);
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to read characteristic; CameraManufacturer_UUID rc=%d", rc);
-            goto err;
-        }
-    }
-
-
-
-    
     */
+    chr = peer_chr_find_uuid(peer, CameraService_UUID, OutgoingCameraControl_UUID);
+    if (chr == NULL) {
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support OutgoingCameraControl_UUID\n");
+        goto err;
+    }
 
-    //blecent_read_write_subscribe(peer);
-    //establishController(peer);
+    ble_write_handle = chr->chr.val_handle;
     return;
 err:
     /* Service discovery failed.  Terminate the connection. */
@@ -545,28 +377,19 @@ static int check_interesting_devices(const struct ble_gap_disc_desc *disc)
 }
 
 static void connect_becouse_interesting(ble_addr_t *addr){
-    bool allow = false;
-    for (int i = 0; i < sizeof discovered_devices; ++i)
-    {
-        if(discovered_devices[i].addr == addr_str(addr)){
-            allow = true; 
-            break;
-        }
-    }
-    if(allow == false){
-        ESP_LOGE(BLE_TAG,"Connecting not allowed to %s", addr_str(addr));
-        return;      
-    }
+    ESP_LOGW(BLE_TAG,"Device is interesting: %s", addr_str(addr->val));
     int rc;
     uint8_t own_addr_type;
     /* Scanning must be stopped before a connection. */
-    rc = ble_gap_disc_cancel();
-    vTaskDelay(100);
-    rc = ble_gap_disc_cancel();
-    if (rc != 0) {
-        MODLOG_DFLT(DEBUG, "Failed to cancel scan; rc=%d\n", rc);
-        return;
+    
+    if(ble_gap_disc_active()){
+        rc = ble_gap_disc_cancel();
+        if (rc != 0) {
+            MODLOG_DFLT(ERROR, "Failed to cancel scan; rc=%d\n", rc);
+            return;
+        }
     }
+
 
     /* Figure out address to use for connect (no privacy for now) */
     rc = ble_hs_id_infer_auto(0, &own_addr_type);
@@ -587,7 +410,9 @@ static void connect_becouse_interesting(ble_addr_t *addr){
     }
 }
 
-
+static void connect_to_addr(uint8_t *addr){
+    return connect_becouse_interesting((ble_addr_t*)addr);
+}
 
 
 
@@ -632,16 +457,6 @@ static void notify_for_new_device(void *disc)
     if (!check_interesting_devices((struct ble_gap_disc_desc *)disc)) {
         return;
     }
-
-    // the device is interesting
-    discovered_devices_count++;
-    if(discovered_devices_count > (MAX_DISC_DEVICES)){
-        return;
-    }
-
-    ESP_LOGW(BLE_TAG,"Device is interesting: %s", addr_str(addr->val));
-    memcpy(discovered_devices[discovered_devices_count - 1].addr, addr, ESP_BD_ADDR_LEN);
-    ESP_LOGW(BLE_TAG,"Device is stored: %s", addr_str(discovered_devices[discovered_devices_count - 1].addr));
     // Extract and store the device name if available
     //esp_ble_gap_update_adv_data((struct ble_gap_disc_desc *)disc, ESP_BLE_AD_TYPE_NAME_CMPL, discovered_devices[discovered_devices_count].name);
     
@@ -740,8 +555,10 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
         peer_delete(event->disconnect.conn.conn_handle);
 
         /* Resume scanning. */
+        if(esp_ble_state == STATE_CONNECTING){
+             blecent_scan();
+        }
         esp_ble_state = STATE_DISCONNECTED;
-        //blecent_scan();
         return 0;
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
@@ -752,32 +569,43 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_ENC_CHANGE:
         ESP_LOGI(BLE_TAG, "blecent_gap_event BLE_GAP_EVENT_ENC_CHANGE encryption change event; status=%d", event->enc_change.status);
         //status have to be 0
-        //non-zero means problem
-        if(event->enc_change.status){
-            ESP_LOGE(BLE_TAG, "\n\n\n\nDELETE BONDING\n\n\n\nBLE_GAP_EVENT_ENC_CHANGE status=%d", event->enc_change.status);
-            /* Delete the old bond. */
-            rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
-            assert(rc == 0);
-            ble_store_util_delete_peer(&desc.peer_id_addr);
-            /* Forget about peer. */
-            peer_delete(event->enc_change.conn_handle);
-            //terminate connection
-            ble_gap_terminate(event->enc_change.conn_handle, event->enc_change.status);
-            return 0;
+        switch(event->enc_change.status){
+            case 0:
+                struct ble_gap_conn_desc desc;
+                int rc;
+                /* Encryption has been enabled or disabled for this connection. */
+                rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
+                assert(rc == 0);
+                MODLOG_DFLT(INFO, "[ BLECENT ] Encryption has been enabled or disabled for this connection \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+                blecent_print_conn_desc(&desc);
+                MODLOG_DFLT(INFO, "[ BLECENT ] \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+                esp_ble_state = STATE_CONNECTED;
+                return start_peer_discovery(event, arg);
+                break;
+            case 1284:
+            case 14:
+                // wrong or not defined passcode
+                // just try again
+                return BLE_GAP_EVENT_REATTEMPT_COUNT;
+                break;
+            default:
+                // non zero and non defined terminate the connection
+                ESP_LOGE(BLE_TAG, "\n\n\n\nDELETE BONDING\n\n\n\nBLE_GAP_EVENT_ENC_CHANGE status=%d", event->enc_change.status);
+                /* Delete the old bond. */
+                rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
+                assert(rc == 0);
+                ble_store_util_delete_peer(&desc.peer_id_addr);
+                /* Forget about peer. */
+                peer_delete(event->enc_change.conn_handle);
+                //terminate connection
+                ble_gap_terminate(event->enc_change.conn_handle, event->enc_change.status);
+                break;
+
         }
-        struct ble_gap_conn_desc desc;
-        int rc;
-        /* Encryption has been enabled or disabled for this connection. */
-        rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
-        assert(rc == 0);
-        MODLOG_DFLT(INFO, "[ BLECENT ] Encryption has been enabled or disabled for this connection \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-        blecent_print_conn_desc(&desc);
-        MODLOG_DFLT(INFO, "[ BLECENT ] \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-        esp_ble_state = STATE_CONNECTED;
-        return start_peer_discovery(event, arg);
+        return 0;
 
     case BLE_GAP_EVENT_NOTIFY_RX:
-        ESP_LOGI(BLE_TAG, "\nblecent_gap_event BLE_GAP_EVENT_NOTIFY_RX");
+        //ESP_LOGI(BLE_TAG, "\nblecent_gap_event BLE_GAP_EVENT_NOTIFY_RX");
         /* Peer sent us a notification or indication. */
         MODLOG_DFLT(INFO, "[ BLECENT ] received %s; conn_handle=%d attr_handle=%d attr_len=%d", event->notify_rx.indication ? "indication" : "notification", event->notify_rx.conn_handle, event->notify_rx.attr_handle, OS_MBUF_PKTLEN(event->notify_rx.om));
         /* Attribute data is contained in event->notify_rx.om. Use
@@ -924,8 +752,6 @@ static void ble_stack_deinit(){
     } else {
         ESP_LOGE(BLE_TAG, "Nimble port stop failed, rc = %d", rc);
     }
-
-    print_discovered_devices();
 }
 
 void blecent_on_reg_callback(struct ble_gatt_register_ctxt * ctxt, void * clb){
