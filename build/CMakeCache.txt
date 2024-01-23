@@ -578,7 +578,7 @@ C_COMPILER_SUPPORTS_WFORMAT_SIGNEDNESS:INTERNAL=1
 //Details about finding Git
 FIND_PACKAGE_MESSAGE_DETAILS_Git:INTERNAL=[/usr/bin/git][v2.39.3 (Apple Git-145)()]
 //Details about finding Python3
-FIND_PACKAGE_MESSAGE_DETAILS_Python3:INTERNAL=[/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/bin/python][cfound components: Interpreter ][v3.11.4()]
+FIND_PACKAGE_MESSAGE_DETAILS_Python3:INTERNAL=[/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/bin/python][cfound components: Interpreter ][v3.11.7()]
 //ADVANCED property for variable: GIT_EXECUTABLE
 GIT_EXECUTABLE-ADVANCED:INTERNAL=1
 //Have include stddef.h
@@ -599,7 +599,7 @@ _Python3_Compiler_REASON_FAILURE:INTERNAL=
 _Python3_Development_REASON_FAILURE:INTERNAL=
 _Python3_EXECUTABLE:INTERNAL=/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/bin/python
 //Python3 Properties
-_Python3_INTERPRETER_PROPERTIES:INTERNAL=Python;3;11;4;32;64;;;abi3;/opt/homebrew/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/lib/python3.11;/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/lib/python3.11;/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/lib/python3.11/site-packages;/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/lib/python3.11/site-packages
+_Python3_INTERPRETER_PROPERTIES:INTERNAL=Python;3;11;7;32;64;;;abi3;/opt/homebrew/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/lib/python3.11;/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/lib/python3.11;/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/lib/python3.11/site-packages;/Users/gavo/.espressif/python_env/idf5.3_py3.11_env/lib/python3.11/site-packages
 _Python3_INTERPRETER_SIGNATURE:INTERNAL=8d938cc02d912093948420bd8af625f9
 //NumPy reason failure
 _Python3_NumPy_REASON_FAILURE:INTERNAL=

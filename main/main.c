@@ -36,7 +36,7 @@
 #include "host/util/util.h"
 #include "console/console.h"
 #include "services/gap/ble_svc_gap.h"
-#include "gatt/blecent.h"
+#include "blecent.h"
 
 #include "driver/gpio.h"
 #include "led_strip.h"
@@ -110,7 +110,8 @@ static const char *TAG = "ESP";
 
 static int s_retry_num = 0;
 
-uint8_t derived_mac_addr[6] = {0};
+uint8_t esp_mac_address[6] = {0};
+const char *esp_device_hostname = "ESP-BLE-"; 
 
 static led_strip_handle_t led_strip;
 
@@ -151,6 +152,20 @@ uint64_t millis() {
     return esp_timer_get_time() / 1000ULL;
 }
 
+void stringToUint8Array(const char *str, uint8_t *uint8Array, size_t arraySize) {
+    size_t strLength = strlen(str);
+
+    // Ensure the array is large enough to store the converted values
+    if (strLength > arraySize) {
+        // Handle insufficient array size
+        return;
+    }
+
+    // Convert each character to its ASCII value
+    for (size_t i = 0; i < strLength; ++i) {
+        uint8Array[i] = (uint8_t)str[i];
+    }
+}
 
 void store_integer_value(const char* key, int value){
     nvs_handle_t nvs_handle;
@@ -363,6 +378,24 @@ void sendBLE_Passkey(uint32_t passkey){
 
         ble_sm_inject_io(conn_handle, &io);
     //esp_ble_passkey_reply(mqtt_client->ble_security.ble_req.bd_addr, true, passkey);
+}
+
+void MQTT_send(const struct os_mbuf *om){
+    uint16_t data_len = OS_MBUF_PKTLEN(om);
+    uint8_t *data = malloc(data_len);
+    
+    if (data != NULL) {
+        os_mbuf_copydata(om, 0, data_len, data);
+
+        // Log the data using the ESP-IDF logging mechanism
+        esp_mqtt_client_enqueue(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0, true);
+        //esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)esp_mac_address, sizeof(esp_mac_address), 0, 0, true); //true means store for non-block
+
+        // Free the allocated buffer
+        free(data);
+    } else {
+        ESP_LOGE(TAG, "Failed to allocate memory for data");
+    }
 }
 
 ////////
@@ -644,7 +677,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             esp_mqtt_state = S_MQTT_CONNECTED;
             //esp_mqtt_client_enqueue is non-blocking
             //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
-            esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)derived_mac_addr, sizeof(derived_mac_addr), 0, 0, true); //true means store for non-block
+            esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)esp_mac_address, sizeof(esp_mac_address), 0, 0, true); //true means store for non-block
             //ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
             esp_mqtt_client_subscribe(client, MQTT_UPSTREAM_TOPIC, 0);
             break;
@@ -822,11 +855,18 @@ void loopWhoim(){
 void app_main(void)
 {
 
-    esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_STA);
+    esp_read_mac(esp_mac_address, ESP_MAC_WIFI_STA);
+    //
+    char esp_device_hostname_[strlen(esp_device_hostname)+6];
+    sprintf(esp_device_hostname_, "%s%02X%02X%02X", esp_device_hostname, esp_mac_address[3], esp_mac_address[4], esp_mac_address[5]);
 
+    esp_device_hostname = esp_device_hostname_;
+
+    ESP_LOGW(TAG, "\n\n\n[APP] ESP ID: %s\n\n\n", esp_device_hostname);
 
     ESP_LOGI(TAG, "[APP] Startup..");
-    ESP_LOGI(TAG, "ESP32 ID: \n\n\n%02X:%02X:%02X:%02X:%02X:%02X\n\n\n",derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+    ESP_LOGW(TAG, "ESP32 MAC: \n\n\n%02X:%02X:%02X:%02X:%02X:%02X\n\n\n",esp_mac_address[0], esp_mac_address[1], esp_mac_address[2],esp_mac_address[3], esp_mac_address[4], esp_mac_address[5]);
+
     ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
@@ -903,7 +943,7 @@ void app_main(void)
     }
 
     check_signaling();
-
+    return;
     while (1) {
         loopWhoim();
         loopWifi();
