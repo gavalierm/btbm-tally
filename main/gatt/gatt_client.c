@@ -112,17 +112,6 @@ static void blecent_log_mbuf(const struct os_mbuf *om){
         }
 }
 
-static int blecent_on_read(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg)
-{
-    MODLOG_DFLT(INFO, "[ BLECENT ] Read complete for the subscribable characteristic; status=%d conn_handle=%d", error->status, conn_handle);
-    if (error->status == 0) {
-        MODLOG_DFLT(INFO, "[ BLECENT ] attr_handle=%d", attr->handle);
-        //print_mbuf(attr->om);
-        blecent_log_mbuf(attr->om);
-    }
-    return 0;
-}
-
 static int blecent_read_log(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg)
 {
     if (error->status == 0) {
@@ -157,34 +146,66 @@ static int blecent_after_write(uint16_t conn_handle, const struct ble_gatt_error
     }
     const struct peer_chr *chr;
     int rc;
-    chr = peer_chr_find_uuid(peer, CameraService_UUID, CameraStatus_UUID);
+    chr = peer_chr_find_uuid(peer, CameraService_UUID, arg);
     if (chr == NULL) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support CameraStatus_UUID\n");
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support in ARG\n");
         goto err;
     }else{
-        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE CameraStatus_UUID\n");
-        rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, blecent_read_log, NULL);
+        MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE in ARG\n");
+        rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, after_read, NULL);
         if (rc != 0) {
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to read characteristic; CameraStatus_UUID rc=%d", rc);
+            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to read characteristic; in ARG rc=%d", rc);
             goto err;
         }
     }
     return 0;
-    /* Subscribe to, write to, and read the custom characteristic*/
-    //blecent_custom_gatt_operations(peer);
 err:
     return 0;
-
 }
 
-static void blecent_write_to_outgoind(uint8_t *data){
+static uint8_t *event_data_buffer = NULL;
+static void blecent_write_to_outgoing(const uint8_t *event_data){
     int rc;
     MODLOG_DFLT(WARN, "[ BLECENT ] blecent_write_to_outgoind\n");
-    if(data == NULL || sizeof(data) < 8){ //at least 8 bytes
+
+    if (event_data_buffer != NULL) {
+        // Free the previous buffer if allocated
+        free(event_data_buffer);
+        event_data_buffer = NULL;
+    }
+
+    // Ensure event_data is not NULL
+    if (event_data == NULL) {
+        MODLOG_DFLT(ERROR, "[ BLECENT ] blecent_write_to_outgoing: NULL event_data\n");
+        return;
+    }
+
+    // Calculate data_len with padding
+    uint8_t data_len = event_data[1] + 4;
+    // Calculate the number of padding bytes
+    size_t padding_bytes = (4 - (data_len % 4)) % 4;
+    // Consider padding in the total length
+    data_len += padding_bytes;
+    // Allocate a new buffer
+    event_data_buffer = malloc(data_len);
+    if (event_data_buffer == NULL) {
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Failed to allocate memory for event_data_buffer\n");
+        return;
+    }
+
+    memcpy(event_data_buffer, event_data, data_len);
+
+    if(data_len < 8){ //at least 8 bytes
+        MODLOG_DFLT(ERROR, "[ BLECENT ] blecent_write_to_outgoind too few data\n");
         return;
     }
     //int8_t value[] = {0xFF,0x05,0x00,0x00,0x01,0x0A,0x01,0x00,0x00,0x00,0x00,0x00};
-    rc = ble_gattc_write_flat(ble_connection_handle, ble_write_handle, data, sizeof(data), NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
+    if(ble_connection_handle == BLE_HS_CONN_HANDLE_NONE || ble_write_handle == BLE_HS_CONN_HANDLE_NONE){
+        MODLOG_DFLT(ERROR, "[ BLECENT ] blecent_write_to_outgoind NO HANDLE1\n");
+        return;
+    }
+    //rc = ble_gattc_write_no_rsp_flat(ble_connection_handle, ble_write_handle, event_data, data_len); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
+    rc = ble_gattc_write_flat(ble_connection_handle, ble_write_handle, event_data, data_len, NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
     if (rc != 0) {
         MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
     }
@@ -224,9 +245,8 @@ static int blecent_subscribe_to(const struct peer *peer, const ble_uuid_t *servi
     return 0;
 err:
     ESP_LOGE(BLE_TAG,"Terminate the connection.");
-    return 1;
     /* Terminate the connection. */
-    ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    return ble_gap_terminate(peer->conn_handle, BLE_ERR_UNSUPPORTED);
 }
 
 static void blecent_on_disc_complete(const struct peer *peer, int status, void *arg)
@@ -270,6 +290,7 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     }else{
         MODLOG_DFLT(WARN,"OK: Subscribed; IncomingCameraControl_UUID");
     }
+    /*
     // subscribe to the camera status
     //true means notifications without ACK
     if (blecent_subscribe_to(peer, Timecode_UUID, true) != 0) {
@@ -278,6 +299,9 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     }else{
         MODLOG_DFLT(WARN,"OK: Subscribed; Timecode_UUID");
     }
+    /*/
+
+
     // subscribe to the camera status
     //true means notifications without ACK
     /*
@@ -295,11 +319,25 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     }
 
     ble_write_handle = chr->chr.val_handle;
+
+    // Example data array
+    uint8_t data_array[] = {0xFF, 0x05, 0x00, 0x00, 0x01, 0x0A, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00};
+
+    // Call the function with the data array
+    blecent_write_to_outgoing(data_array);
+
+    vTaskDelay(5000);
+    // Example data array
+    uint8_t data_array2[] = {0xFF, 0x05, 0x00, 0x00, 0x01, 0x0A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+    // Call the function with the data array
+    blecent_write_to_outgoing(data_array2);
+
     return;
 err:
     /* Service discovery failed.  Terminate the connection. */
     MODLOG_DFLT(ERROR, "[ BLECENT ] Error: blecent_on_disc_complete failed; status=%d conn_handle=%d\n", status, peer->conn_handle);
-    //ble_gap_terminate(peer->conn_handle, BLE_ERR_UNSUPPORTED);
+    ble_gap_terminate(peer->conn_handle, BLE_ERR_UNSUPPORTED);
 }
 
 
@@ -607,7 +645,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_NOTIFY_RX:
         //ESP_LOGI(BLE_TAG, "\nblecent_gap_event BLE_GAP_EVENT_NOTIFY_RX");
         /* Peer sent us a notification or indication. */
-        MODLOG_DFLT(INFO, "[ BLECENT ] received %s; conn_handle=%d attr_handle=%d attr_len=%d", event->notify_rx.indication ? "indication" : "notification", event->notify_rx.conn_handle, event->notify_rx.attr_handle, OS_MBUF_PKTLEN(event->notify_rx.om));
+        //MODLOG_DFLT(INFO, "[ BLECENT ] received %s; conn_handle=%d attr_handle=%d attr_len=%d", event->notify_rx.indication ? "indication" : "notification", event->notify_rx.conn_handle, event->notify_rx.attr_handle, OS_MBUF_PKTLEN(event->notify_rx.om));
         /* Attribute data is contained in event->notify_rx.om. Use
          * `os_mbuf_copydata` to copy the data received in notification mbuf */
         // Log the data from the notify_rx event

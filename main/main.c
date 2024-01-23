@@ -155,10 +155,11 @@ void BLE_onReceive(const struct os_mbuf *om){
     
     if (data != NULL) {
         os_mbuf_copydata(om, 0, data_len, data);
-        if(data[5] == 9){
-            ESP_LOGW(BLE_TAG,"DATA ID 9");
+        if(data[4] == 9 && data[5] == 0){ // 4 means operation type timecode 5 means thick
+            //ESP_LOGW(BLE_TAG,"DATA Timecode Thick");
+            return;
         }
-
+        ESP_LOG_BUFFER_HEX("DATA", data, data_len);
         // send data to mqtt using enqueue whis is async-like behavior
         // sending from camera to the operator do not have priorty
         esp_mqtt_client_enqueue(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0, true);
@@ -192,8 +193,8 @@ void BLE_sendConnect(uint8_t *addr){
 void BLE_sendDisconnect(){
     ble_gap_terminate(ble_connection_handle, BLE_ERR_REM_USER_CONN_TERM);
 }
-void BLE_sendData(uint8_t *data){
-    blecent_write_to_outgoind(data);
+void BLE_sendData(const uint8_t *event_data){
+    blecent_write_to_outgoing(event_data);
 }
 /*
  * WIFI
