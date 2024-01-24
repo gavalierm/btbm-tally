@@ -1,4 +1,4 @@
-# ESP32 BLE to MQTT Bridge
+# ESP32 TALLY light with Bluetooth control for Blackmagic Camera
 The main goal is to use ESP32 with BLE to bridge the gap between Blackmagic ATEM (not implemented yet) and Blackmagic Pocket camera.
 
 
@@ -9,11 +9,20 @@ Because we need to do some special stuff like handle BLE discovering, passkey ha
 
 
 ## Requirements
-- ESP32 with BLE
+- ESP32 with BLE (RGB shield for tally)
 - Python installed on your computer (for running idf.py)
 - ESP-IDF installed on your computer (for flashing)
 - Custom app to read and send RAW data (like MQTTX)
 
+
+## TALLY
+This project starts as Custom tally light for ATEM many years ago. Using ESP-8266 as Websocket client with RGB shield on. With Node.js websocket server and arbiter for ATEM protocol (based on https://github.com/nrkno/sofie-atem-connection)
+So i try to keep this feature in this project too and combine it with BLE.
+Tally messages is described in PROTOCOL (custom part RGB tally). Many fancy features out there!
+
+Mote: I combined tally messaging to CCU protocol using custom not used part. Yes it can be done by separate topic, because is just read only, but i like to have just one protocol.
+
+Tip: The brigtness of tally can be changed by official TALLY command. So ...
 
 ## How It Works
 - ESP boots up with Wifi, BLE, MQTT, and RGB led components
@@ -32,13 +41,18 @@ Because we need to do some special stuff like handle BLE discovering, passkey ha
 - Your client app needs to read the RAW buffer and do what is needed (like converting to human speech)
 
 ## Setup
+
+
 ### Setup MQTT client
+
 - You need MQTT client and broker to run this. I use my own node.js MQTT host running on local network, but you can use any public MQTT (but count with latency).
 - For testing we can use MQTTX client https://mqttx.app/ (online version http://www.emqx.io/online-mqtt-client#/).
 - Run the broker (or use public) and connect your Client app to broker.
 - MQTT is ready.
 
+
 ### Topics
+
 Two way communication is done with 2 main topics
 ```
 #define MQTT_DOWNSTREAM_TOPIC "/btmqtt/ccu/raw/downstream"
@@ -54,7 +68,9 @@ The camera will respond to all `upstream` messages with the same data `downstrea
 
 Using just one topic is not a good idea because the camera will receive its own messages, which is undesirable. This is to avoid "Camera to Camera loops" ensuring that cameras do not receive messages from others.
 
+
 ### Prepare for read and send HEX buffer
+
 Because the data payloads is HEX buffer is not human readable you can not read the data by eyes and need to setup APP for that (see APP part).
 
 But with MQTTX you can send HEX buffer to ESP.
@@ -74,19 +90,23 @@ This message have exact structure like common Blackmagic SDI protocol so:
 - Payloads
 - Padding (32bit calculated)
 
+
 ```
 De Le Cm __ Ca Pa Ty Op 1_ 2_ 3_ 4_ 5_ 6_ 7_ 8_
 FF 05 00 00 81 03 00 00 01 29 0f 00
 ```
 
+
 The payload for "Passkey" is HEX representation of 6 digid number in REVERSED order (LSB) so `123456` will `01 E2 40` in standard order so in LSB `40 E2 01`
 Use the rapidtables.com (see Related) to convert digids to hex and do not forget reverse the order. Note: rapidtables.com trim zero from last(first) byte, add `0` if needed.
+
 
 ### App (a.k.a Human client)
 
 The app is not part of this code. If you want to build a good-looking app, just notify me to see how it goes. :)
 
 The main goal is to use some sort of node.js, Svelte, PWA app to receive HEX data, convert it accordingly to the PROTOCOL, and render a nice GUI to display values. And, of course, update values, convert them back to HEX, and send them back to the camera. We want to control the camera, right?
+
 
 ### Auto generated commands for example
 
