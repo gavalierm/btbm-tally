@@ -50,9 +50,9 @@ Upstream is "From Client to the Camera"
 So Camera is subsribed to the `upstream` and publish data to `downstream`.
 So Client is subsribed to the `downstream` and publish data to `upstream`.
 
-Camera will be respond to all `upstream` messages back with the same data to the `downstream`, this is done by the camera and can not be turned off. Client just need do not resend `downstream` data back to `upstream`. It will create inifinte loop.
+The camera will respond to all `upstream` messages with the same data `downstream`. This is handled by the camera and cannot be turned off. Clients just need to avoid resending `downstream` data back `upstream` to prevent creating an infinite loop.
 
-Using just one topic is not good idea, because camera will receive own messages and this is unwanted, to reject the `Camera to Camera loops` or Cameras will not receive the messages from others. 
+Using just one topic is not a good idea because the camera will receive its own messages, which is undesirable. This is to avoid "Camera to Camera loops" ensuring that cameras do not receive messages from others.
 
 ### Prepare for read and send HEX buffer
 Because the data payloads is HEX buffer is not human readable you can not read the data by eyes and need to setup APP for that (see APP part).
