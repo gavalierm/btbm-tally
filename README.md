@@ -1,10 +1,14 @@
-# ESP32 TALLY light with Bluetooth control for Blackmagic Camera
-The main goal is to use ESP32 with BLE to bridge the gap between Blackmagic ATEM (not implemented yet) and Blackmagic Pocket camera.
+# ESP32 TALLY light with Bluetooth CCU for Blackmagic Camera
+The main goal is to use ESP32 with BLE to bridge the gap between Blackmagic ATEM (not part of this project see "App" part) and Blackmagic Pocket camera.
 
 
 ## The Idea
-The idea is so simple that I'm really surprised I did not find any GIT repo to do this. The idea is to "do nothing, just bridge."
-### Do Nothing But...
+The idea is so simple that I'm really surprised I did not find any GIT repo to do this. 
+
+*The idea is: "do nothing, just bridge."*
+
+
+### Do Nothing but...
 Because we need to do some special stuff like handle BLE discovering, passkey handshakes, registrations, and so on, the PROTOCOL has to be extended to these custom RAW messages. (See PROTOCOL part)
 
 
@@ -16,26 +20,33 @@ Because we need to do some special stuff like handle BLE discovering, passkey ha
 
 
 ## TALLY
-This project starts as Custom tally light for ATEM many years ago. Using ESP-8266 as Websocket client with RGB shield on. With Node.js websocket server and arbiter for ATEM protocol (based on https://github.com/nrkno/sofie-atem-connection)
+This project starts as Custom tally light for ATEM many years ago. Using ESP-8266 as Websocket client with RGB shield on. With Node.js websocket server as arbiter for ATEM protocol (based on https://github.com/nrkno/sofie-atem-connection)
 So i try to keep this feature in this project too and combine it with BLE.
 Tally messages is described in PROTOCOL (custom part RGB tally). Many fancy features out there!
 
-Mote: I combined tally messaging to CCU protocol using custom not used part. Yes it can be done by separate topic, because is just read only, but i like to have just one protocol.
+Note: I combined tally messaging with the official CCU protocol using custom unused groups (128,129). Yes it can be done by separate topic, because is just read only, but i like to have just one protocol.
 
 Tip: The brigtness of tally can be changed by official TALLY command. So ...
 
 ## How It Works
 - ESP boots up with Wifi, BLE, MQTT, and RGB led components
-- ESP tries to establish the WIFI connection; if it fails, ESP shuts down (the SSID and PASSCODE can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
-- ESP tries to establish MQTT connection; if it fails, ESP shuts down (the MQTT host can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
+- ESP tries to establish the WIFI connection.
+-- if it fails, ESP shuts down (the SSID and PASSCODE can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
+- ESP tries to establish MQTT connection
+-- if it fails, ESP shuts down (the MQTT host can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
 - Now, we have the essential part done. Without wifi and mqtt, we cannot establish a BLE connection because BLE needs more things to do (see BLE part)
-- ESP starts scanning and finds the Blackmagic camera (0x1800 SVC id); if found, MQTT will be notified (at this moment, you need to have at least one MQTT client reading the topic to see the camera list)
+- Now tally ligts starts working, because Wifi and MQTT is ready, you can use it as TALLY only BLE is not essential.
+- ESP starts scanning and finds the Blackmagic camera (0x1800 SVC id)
+-- if found, MQTT will be notified (at this moment, you need to have at least one MQTT client reading the topic to see the camera list)
 - ESP scanning stops and waits for MQTT message indicating which camera you want to connect to
 - ESP receives the address from MQTT and performs a connection
-- CAMERA will respond with PASSKEY if this is the very first attempt. If not and devices are bonded, just accept the connection
-- ESP will notify MQTT with the status code "Need pass" and will wait 30s (this is the camera waiting time and cannot be increased)
+- CAMERA will respond with PASSKEY if this is the very first attempt
+-- If not and devices are bonded, just accept the connection
+- ESP will notify MQTT with the status code "Need pass" and will wait 30s
+-- (this is the camera waiting time and cannot be increased)
 - ESP will wait for MQTT response with a 6-digit passcode
-- CAMERA waits for a response, checks the passkey, and accepts the connection; if the passkey is wrong, BLE will stop, and you need to start the connect procedure again
+- CAMERA waits for a response, checks the passkey, and accepts the connection
+-- if the passkey is wrong, BLE will stop, and you need to start the connect procedure again
 - Now, we have everything set
 - CAMERA starts sending CCU, TIMECODE, and THICK data to ESP, and ESP will forward this data to MQTT
 - Your client app needs to read the RAW buffer and do what is needed (like converting to human speech)
@@ -402,5 +413,7 @@ https://github.com/espressif/esp-idf/tree/master/examples/bluetooth/nimble/blece
 https://www.rapidtables.com/convert/number/decimal-to-hex.html
 
 https://documents.blackmagicdesign.com/DeveloperManuals/BlackmagicCameraControl.pdf
+
+https://github.com/nrkno/sofie-atem-connection
 
 Special thanks to @esp-ihr and @rahult-github
