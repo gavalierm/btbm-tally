@@ -33,10 +33,10 @@ Because we need to do some special stuff like handle BLE discovering, passkey ha
 
 ## Setup
 ### Setup MQTT client
-You need MQTT client and broker to run this. I use my own node.js MQTT host running on local network, but you can use any public MQTT (but count with latency).
-For testing we can use MQTTX client https://mqttx.app/ (online version http://www.emqx.io/online-mqtt-client#/).
-Run the broker (or use public) and connect your Client app to broker.
-MQTT is ready.
+- You need MQTT client and broker to run this. I use my own node.js MQTT host running on local network, but you can use any public MQTT (but count with latency).
+- For testing we can use MQTTX client https://mqttx.app/ (online version http://www.emqx.io/online-mqtt-client#/).
+- Run the broker (or use public) and connect your Client app to broker.
+- MQTT is ready.
 
 ### Topics
 Two way communication is done with 2 main topics
@@ -44,11 +44,11 @@ Two way communication is done with 2 main topics
 #define MQTT_DOWNSTREAM_TOPIC "/btmqtt/ccu/raw/downstream"
 #define MQTT_UPSTREAM_TOPIC "/btmqtt/ccu/raw/upstream"
 ```
-Downstream is "From Camera to the broker/mqtt clients"
-Upstream is "From Client to the Camera"
+- Downstream is "From Camera to the broker/mqtt clients"
+- Upstream is "From Client to the Camera"
 
-So Camera is subsribed to the `upstream` and publish data to `downstream`.
-So Client is subsribed to the `downstream` and publish data to `upstream`.
+- So Camera is subsribed to the `upstream` and publish data to `downstream`.
+- So Client is subsribed to the `downstream` and publish data to `upstream`.
 
 The camera will respond to all `upstream` messages with the same data `downstream`. This is handled by the camera and cannot be turned off. Clients just need to avoid resending `downstream` data back `upstream` to prevent creating an infinite loop.
 
@@ -56,8 +56,11 @@ Using just one topic is not a good idea because the camera will receive its own 
 
 ### Prepare for read and send HEX buffer
 Because the data payloads is HEX buffer is not human readable you can not read the data by eyes and need to setup APP for that (see APP part).
+
 But with MQTTX you can send HEX buffer to ESP.
+
 According to the PROTOCOL (custom part Bluetooth) the first message what you will need is "Passkey".
+
 This message have exact structure like common Blackmagic SDI protocol so:
 
 - Destinaton
@@ -82,6 +85,7 @@ Use the rapidtables.com (see Related) to convert digids to hex and do not forget
 ### App (a.k.a Human client)
 
 The app is not part of this code. If you want to build a good-looking app, just notify me to see how it goes. :)
+
 The main goal is to use some sort of node.js, Svelte, PWA app to receive HEX data, convert it accordingly to the PROTOCOL, and render a nice GUI to display values. And, of course, update values, convert them back to HEX, and send them back to the camera. We want to control the camera, right?
 
 ### Auto generated commands for example
