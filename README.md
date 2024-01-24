@@ -33,22 +33,22 @@ Tip: The brigtness of tally can be changed by official TALLY command. So ...
 
 - ESP boots up with Wifi, BLE, MQTT, and RGB led components
 - ESP tries to establish the WIFI connection.
- - if it fails, ESP shuts down (the SSID and PASSCODE can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
+  - if it fails, ESP shuts down (the SSID and PASSCODE can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
 - ESP tries to establish MQTT connection
- - if it fails, ESP shuts down (the MQTT host can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
+  - if it fails, ESP shuts down (the MQTT host can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
 - Now, we have the essential part done. Without wifi and mqtt, we cannot establish a BLE connection because BLE needs more things to do (see BLE part)
 - Now tally ligts starts working, because Wifi and MQTT is ready, you can use it as TALLY only BLE is not essential.
 - ESP starts scanning and finds the Blackmagic camera (0x1800 SVC id)
- - if found, MQTT will be notified (at this moment, you need to have at least one MQTT client reading the topic to see the camera list)
+  - if found, MQTT will be notified (at this moment, you need to have at least one MQTT client reading the topic to see the camera list)
 - ESP scanning stops and waits for MQTT message indicating which camera you want to connect to
 - ESP receives the address from MQTT and performs a connection
 - CAMERA will respond with PASSKEY if this is the very first attempt
- - If not and devices are bonded, just accept the connection
+  - If not and devices are bonded, just accept the connection
 - ESP will notify MQTT with the status code "Need pass" and will wait 30s
- - (this is the camera waiting time and cannot be increased)
+  - (this is the camera waiting time and cannot be increased)
 - ESP will wait for MQTT response with a 6-digit passcode
 - CAMERA waits for a response, checks the passkey, and accepts the connection
- - if the passkey is wrong, BLE will stop, and you need to start the connect procedure again
+  - if the passkey is wrong, BLE will stop, and you need to start the connect procedure again
 - Now, we have everything set
 - CAMERA starts sending CCU, TIMECODE, and THICK data to ESP, and ESP will forward this data to MQTT
 - Your client app needs to read the RAW buffer and do what is needed (like converting to human speech)
