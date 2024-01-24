@@ -47,16 +47,15 @@ This message have exact structure like common Blackmagic SDI protocol so:
 - Reserved
 - Category
 - Parameter
-- Operation
 - Datatype
+- Operation
 - Payloads
 - Padding (32bit calculated)
-
 ```
 De Le Cm __ Ca Pa Ty Op 1_ 2_ 3_ 4_ 5_ 6_ 7_ 8_
 FF 05 00 00 81 03 00 00 01 29 0f 00
 ```
-The payload for "Passkey" is HEX representation of 6 digid number in REVERSED order (LSB) so `123456` will `be 01 E2 40` in standard order so in LSB `40 E2 01 be`
+The payload for "Passkey" is HEX representation of 6 digid number in REVERSED order (LSB) so `123456` will `01 E2 40` in standard order so in LSB `40 E2 01`
 Use the rapidtables.com (see Related) to convert digids to hex and do not forget reverse the order. Note: rapidtables.com trim zero from last(first) byte, add `0` if needed.
 
 ## Auto generated commands for example
