@@ -79,6 +79,10 @@ FF 05 00 00 81 03 00 00 01 29 0f 00
 The payload for "Passkey" is HEX representation of 6 digid number in REVERSED order (LSB) so `123456` will `01 E2 40` in standard order so in LSB `40 E2 01`
 Use the rapidtables.com (see Related) to convert digids to hex and do not forget reverse the order. Note: rapidtables.com trim zero from last(first) byte, add `0` if needed.
 
+### App (a.k.a Human client)
+
+The app is not part of this code. If you want to build a good-looking app, just notify me to see how it goes. :)
+The main goal is to use some sort of node.js, Svelte, PWA app to receive HEX data, convert it accordingly to the PROTOCOL, and render a nice GUI to display values. And, of course, update values, convert them back to HEX, and send them back to the camera. We want to control the camera, right?
 
 ### Auto generated commands for example
 
