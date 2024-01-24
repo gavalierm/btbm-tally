@@ -205,7 +205,7 @@ static void blecent_write_to_outgoing(const uint8_t *event_data){
         return;
     }
     //rc = ble_gattc_write_no_rsp_flat(ble_connection_handle, ble_write_handle, event_data, data_len); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
-    rc = ble_gattc_write_flat(ble_connection_handle, ble_write_handle, event_data, data_len, blecent_after_write, OutgoingCameraControl_UUID); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
+    rc = ble_gattc_write_flat(ble_connection_handle, ble_write_handle, event_data, data_len, NULL, NULL); //NULL = send, wait for ACK, do nothing. no_rsp not working - write have to be with ACK
     if (rc != 0) {
         MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; OutgoingCameraControl_UUID rc=%d", rc);
     }
@@ -291,7 +291,15 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
         MODLOG_DFLT(WARN,"OK: Subscribed; IncomingCameraControl_UUID");
     }
     /*
-    // subscribe to the camera status
+    // subscribe to the CameraStatus_UUID
+    //true means notifications without ACK
+    if (blecent_subscribe_to(peer, CameraStatus_UUID, true) != 0) {
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: CameraStatus_UUID");
+        //goto err;
+    }else{
+        MODLOG_DFLT(WARN,"OK: Subscribed; CameraStatus_UUID");
+    }
+    // subscribe to the Timecode_UUID
     //true means notifications without ACK
     if (blecent_subscribe_to(peer, Timecode_UUID, true) != 0) {
         MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Timecode_UUID");
@@ -301,17 +309,6 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     }
     /*/
 
-
-    // subscribe to the camera status
-    //true means notifications without ACK
-    /*
-    if (blecent_subscribe_to(peer, CameraStatus_UUID, true) != 0) {
-        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: CameraStatus_UUID");
-        //goto err;
-    }else{
-        MODLOG_DFLT(WARN,"OK: Subscribed; CameraStatus_UUID");
-    }
-    */
     chr = peer_chr_find_uuid(peer, CameraService_UUID, OutgoingCameraControl_UUID);
     if (chr == NULL) {
         MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Peer doesn't support OutgoingCameraControl_UUID\n");
@@ -319,19 +316,6 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     }
 
     ble_write_handle = chr->chr.val_handle;
-
-    // Example data array
-    uint8_t data_array[] = {0xFF, 0x05, 0x00, 0x00, 0x01, 0x0A, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00};
-
-    // Call the function with the data array
-    blecent_write_to_outgoing(data_array);
-
-    vTaskDelay(5000);
-    // Example data array
-    uint8_t data_array2[] = {0xFF, 0x05, 0x00, 0x00, 0x01, 0x0A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-    // Call the function with the data array
-    blecent_write_to_outgoing(data_array2);
 
     return;
 err:
@@ -645,7 +629,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_NOTIFY_RX:
         //ESP_LOGI(BLE_TAG, "\nblecent_gap_event BLE_GAP_EVENT_NOTIFY_RX");
         /* Peer sent us a notification or indication. */
-        //MODLOG_DFLT(INFO, "[ BLECENT ] received %s; conn_handle=%d attr_handle=%d attr_len=%d", event->notify_rx.indication ? "indication" : "notification", event->notify_rx.conn_handle, event->notify_rx.attr_handle, OS_MBUF_PKTLEN(event->notify_rx.om));
+        MODLOG_DFLT(INFO, "[ BLECENT ] received %s; conn_handle=%d attr_handle=%d attr_len=%d" , event->notify_rx.indication ? "indication" : "notification", event->notify_rx.conn_handle, event->notify_rx.attr_handle, OS_MBUF_PKTLEN(event->notify_rx.om));
         /* Attribute data is contained in event->notify_rx.om. Use
          * `os_mbuf_copydata` to copy the data received in notification mbuf */
         // Log the data from the notify_rx event
@@ -814,7 +798,7 @@ void BLEClient_app_main(void)
 
     ble_hs_cfg.sm_io_cap = BLE_HS_IO_KEYBOARD_ONLY; /// BLE_HS_IO_DISPLAY_YESNO BLE_HS_IO_KEYBOARD_ONLY
     ble_hs_cfg.sm_bonding = 1;
-    //ble_hs_cfg.sm_oob_data_flag = 0;
+    ble_hs_cfg.sm_oob_data_flag = 0;
 
     ble_hs_cfg.sm_our_key_dist   = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;  
     ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
@@ -823,7 +807,7 @@ void BLEClient_app_main(void)
     //ble_hs_cfg.auth_req = BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM;
 
     /* Initialize data structures to track connected peers. */
-    rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 64, 64, 64);
+    rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 32, 32, 32);
     assert(rc == 0);
 
     rc = ble_svc_gap_device_name_set(esp_device_hostname);

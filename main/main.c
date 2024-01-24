@@ -159,7 +159,7 @@ void BLE_onReceive(const struct os_mbuf *om){
             //ESP_LOGW(BLE_TAG,"DATA Timecode Thick");
             return;
         }
-        ESP_LOG_BUFFER_HEX("DATA", data, data_len);
+        ESP_LOG_BUFFER_HEX("DATA", data, data_len); //Log is formated to 16 bytes per LINE
         // send data to mqtt using enqueue whis is async-like behavior
         // sending from camera to the operator do not have priorty
         esp_mqtt_client_enqueue(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0, true);
@@ -707,12 +707,30 @@ void app_main(void)
     }
 
     check_signaling();
-    return;
+    bool on = 0;
+    uint8_t data_array[12];
     while (1) {
-        loopWhoim();
-        loopWifi();
-        loopMQTT(); 
-        loopBLE(); 
+        /*
+        if(esp_ble_state == STATE_CONNECTED){
+            if (on) {
+                // Update values if 'on' is true
+                memcpy(data_array, (uint8_t[]){0xFF, 0x05, 0x00, 0x00, 0x01, 0x0A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00}, sizeof(data_array));
+            } else {
+                // Update values if 'on' is false
+                memcpy(data_array, (uint8_t[]){0xFF, 0x05, 0x00, 0x00, 0x01, 0x0A, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00}, sizeof(data_array));
+            }
+            on = !on;
+            // Call the function with the data array
+            BLE_sendData(data_array);    
+        }
+        */
+     
+
+
+        //loopWhoim();
+        //loopWifi();
+        //loopMQTT(); 
+        //loopBLE(); 
         vTaskDelay(1000);
     }
 }
