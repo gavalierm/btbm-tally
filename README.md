@@ -31,13 +31,28 @@ Because we need to do some special stuff like handle BLE discovering, passkey ha
 - CAMERA starts sending CCU, TIMECODE, and THICK data to ESP, and ESP will forward this data to MQTT
 - Your client app needs to read the RAW buffer and do what is needed (like converting to human speech)
 
-
+## Setup
 ### Setup MQTT client
 You need MQTT client and broker to run this. I use my own node.js MQTT host running on local network, but you can use any public MQTT (but count with latency).
 For testing we can use MQTTX client https://mqttx.app/ (online version http://www.emqx.io/online-mqtt-client#/).
 Run the broker (or use public) and connect your Client app to broker.
 MQTT is ready.
 
+### Topics
+Two way communication is done with 2 main topics
+```
+#define MQTT_DOWNSTREAM_TOPIC "/btmqtt/ccu/raw/downstream"
+#define MQTT_UPSTREAM_TOPIC "/btmqtt/ccu/raw/upstream"
+```
+Downstream is "From Camera to the broker/mqtt clients"
+Upstream is "From Client to the Camera"
+
+So Camera is subsribed to the `upstream` and publish data to `downstream`.
+So Client is subsribed to the `downstream` and publish data to `upstream`.
+
+Camera will be respond to all `upstream` messages back with the same data to the `downstream`, this is done by the camera and can not be turned off. Client just need do not resend `downstream` data back to `upstream`. It will create inifinte loop.
+
+Using just one topic is not good idea, because camera will receive own messages and this is unwanted, to reject the `Camera to Camera loops` or Cameras will not receive the messages from others. 
 
 ### Prepare for read and send HEX buffer
 Because the data payloads is HEX buffer is not human readable you can not read the data by eyes and need to setup APP for that (see APP part).
@@ -65,7 +80,7 @@ The payload for "Passkey" is HEX representation of 6 digid number in REVERSED or
 Use the rapidtables.com (see Related) to convert digids to hex and do not forget reverse the order. Note: rapidtables.com trim zero from last(first) byte, add `0` if needed.
 
 
-## Auto generated commands for example
+### Auto generated commands for example
 
 ```
 TESTING: Create datagram from all protocol groups and commands
