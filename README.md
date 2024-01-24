@@ -1,17 +1,19 @@
 # ESP32 BLE to MQTT Bridge
 The main goal is to use ESP32 with BLE to bridge the gap between Blackmagic ATEM (not implemented yet) and Blackmagic Pocket camera.
 
+
 ## The Idea
 The idea is so simple that I'm really surprised I did not find any GIT repo to do this. The idea is to "do nothing, just bridge."
-
 ### Do Nothing But...
 Because we need to do some special stuff like handle BLE discovering, passkey handshakes, registrations, and so on, the PROTOCOL has to be extended to these custom RAW messages. (See PROTOCOL part)
+
 
 ## Requirements
 - ESP32 with BLE
 - Python installed on your computer (for running idf.py)
 - ESP-IDF installed on your computer (for flashing)
 - Custom app to read and send RAW data (like MQTTX)
+
 
 ## How It Works
 - ESP boots up with Wifi, BLE, MQTT, and RGB led components
@@ -29,14 +31,16 @@ Because we need to do some special stuff like handle BLE discovering, passkey ha
 - CAMERA starts sending CCU, TIMECODE, and THICK data to ESP, and ESP will forward this data to MQTT
 - Your client app needs to read the RAW buffer and do what is needed (like converting to human speech)
 
+
 ### Setup MQTT client
 You need MQTT client and broker to run this. I use my own node.js MQTT host running on local network, but you can use any public MQTT (but count with latency).
 For testing we can use MQTTX client https://mqttx.app/ (online version http://www.emqx.io/online-mqtt-client#/).
 Run the broker (or use public) and connect your Client app to broker.
 MQTT is ready.
 
+
 ### Prepare for read and send HEX buffer
-Because the data payloads is HEX buffer is not readable to human. You can not read the data by eyes and need to setup APP for that (see APP part).
+Because the data payloads is HEX buffer is not human readable you can not read the data by eyes and need to setup APP for that (see APP part).
 But with MQTTX you can send HEX buffer to ESP.
 According to the PROTOCOL (custom part Bluetooth) the first message what you will need is "Passkey".
 This message have exact structure like common Blackmagic SDI protocol so:
@@ -51,14 +55,18 @@ This message have exact structure like common Blackmagic SDI protocol so:
 - Operation
 - Payloads
 - Padding (32bit calculated)
+
 ```
 De Le Cm __ Ca Pa Ty Op 1_ 2_ 3_ 4_ 5_ 6_ 7_ 8_
 FF 05 00 00 81 03 00 00 01 29 0f 00
 ```
+
 The payload for "Passkey" is HEX representation of 6 digid number in REVERSED order (LSB) so `123456` will `01 E2 40` in standard order so in LSB `40 E2 01`
 Use the rapidtables.com (see Related) to convert digids to hex and do not forget reverse the order. Note: rapidtables.com trim zero from last(first) byte, add `0` if needed.
 
+
 ## Auto generated commands for example
+
 ```
 TESTING: Create datagram from all protocol groups and commands
 The fake values are generated with 'value == (max/2)' value.
@@ -336,12 +344,20 @@ De Le Cm __ Ca Pa Ty Op 1_ 2_ 3_ 4_ 5_ 6_ 7_ 8_
 FF 08 00 00 81 03 03 00 1F A1 07 00
 ```
 
+
 ## Support and License
 This script is free for scenarios such as churches, educational platforms, charity events, etc. If you want to use this script at paid events like concerts, conferences, etc., be grateful and send some "thank you" via [PayPal](https://paypal.me/MarcelGavalier).
 
+
 ## Related
 https://github.com/marklysze/Magic-Pocket-Control-ESP32/issues/2
+
 https://github.com/espressif/esp-idf/issues/12989
+
 https://github.com/espressif/esp-idf/tree/master/examples/bluetooth/nimble/blecent
+
 https://www.rapidtables.com/convert/number/decimal-to-hex.html
+
 https://documents.blackmagicdesign.com/DeveloperManuals/BlackmagicCameraControl.pdf
+
+Special thanks to @esp-ihr and @rahult-github
