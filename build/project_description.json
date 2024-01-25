@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "btbm-tally",
-    "project_version":    "f40917f-dirty",
+    "project_version":    "c05d1f0-dirty",
     "project_path":       "/Users/gavo/Projects/VYVOJ/arduino/btbm-tally",
     "idf_path":           "/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf",
     "build_dir":          "/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build",

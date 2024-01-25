@@ -1,3 +1,47 @@
+void store_integer_value(const char* key, int value){
+    nvs_handle_t nvs_handle;
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
+    ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, key, value)); //i32 means integer
+    ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+    // Close NVS handle
+    nvs_close(nvs_handle);
+}
+
+int get_integer_value(const char* key) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
+
+    // Read the integer value with the provided key
+    int32_t value;
+    err = nvs_get_i32(nvs_handle, key, &value);
+    if (err == ESP_OK) {
+        //printf("Retrieved value from NVS with key '%s': %d\n", key, value);
+    } else {
+        //printf("Error getting value from NVS: %s\n", esp_err_to_name(err));
+        // Return a default value or an error code
+        value = -1;
+    }
+
+    // Close NVS handle
+    nvs_close(nvs_handle);
+
+    return value;
+}
+
+void update_esp_name(){
+    // Ensure id fits within three digits
+    if(who_im <= 0 && who_im >= 99){
+        return;
+    }
+    // Replace 255 with ID with trailing zero
+    snprintf((char *)(esp_device_hostname), 18,  "ESP-BLE-%02X%02X%02X-%02d",esp_mac_address[3], esp_mac_address[4], esp_mac_address[5], who_im);
+    // Print the modified string
+    ESP_LOGW(APP_TAG, "Updated Hostname: %s\n", esp_device_hostname);
+    store_integer_value("who_im", who_im);
+}
+
 // Function to convert raw data to a hexadecimal string with spaces and log using ESP_LOGI
 void log_hex_data(const char *log_tag, const uint8_t *raw_data, size_t raw_data_len) {
     char hex_string[(raw_data_len * 3) + 1]; // Each byte takes 3 characters (2 hex + 1 space)
@@ -71,39 +115,6 @@ int convertFixed16ToInt(uint8_t* packet) {
     int intValue = (int)(floatValue * 255.0);
     ESP_LOGI(APP_TAG, "Converted INT Value (fixed16): %d\n", intValue);
     return intValue;
-}
-
-
-void store_integer_value(const char* key, int value){
-    nvs_handle_t nvs_handle;
-    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
-    ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, key, value)); //i32 means integer
-    ESP_ERROR_CHECK(nvs_commit(nvs_handle));
-    // Close NVS handle
-    nvs_close(nvs_handle);
-}
-
-int get_integer_value(const char* key) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs_handle));
-
-    // Read the integer value with the provided key
-    int32_t value;
-    err = nvs_get_i32(nvs_handle, key, &value);
-    if (err == ESP_OK) {
-        //printf("Retrieved value from NVS with key '%s': %d\n", key, value);
-    } else {
-        //printf("Error getting value from NVS: %s\n", esp_err_to_name(err));
-        // Return a default value or an error code
-        value = -1;
-    }
-
-    // Close NVS handle
-    nvs_close(nvs_handle);
-
-    return value;
 }
 
 static void log_error_if_nonzero(const char *message, int error_code)

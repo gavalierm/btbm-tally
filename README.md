@@ -34,7 +34,7 @@ Tip: The brigtness of tally can be changed by official TALLY command. So ...
 - ESP boots up with Wifi, BLE, MQTT, and RGB led components
 - ESP tries to establish the WIFI connection.
   - if it fails, ESP shuts down (the SSID and PASSCODE can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
-  - 
+  - s
 - ESP tries to establish MQTT connection
   - if it fails, ESP shuts down (the MQTT host can be hardcoded in sdkconfig.defaults or using idf.py Menuconfig)
   - 

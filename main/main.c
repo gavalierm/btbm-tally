@@ -74,13 +74,12 @@ typedef enum {
     STATE_CONNECTING,
     STATE_CONNECTED,
     STATE_TIMEOUT,
-    STATE_PASSCODE,
-    STATE_WHOIM_UNDEFINED,
-    STATE_WHOIM_DEFINED
+    STATE_CAM_ID,
+    STATE_PASSCODE
 } ESPState;
 
 /* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
+//static EventGroupHandle_t s_wifi_event_group;
 
 static const char *APP_TAG = "[ APP ] ";
 static const char *BLE_TAG = "[ BLE ] ";
@@ -100,7 +99,7 @@ int who_im = 255; //255 means all data is for me
 int signaling = 0;
 //
 uint8_t esp_mac_address[6] = {0};
-char esp_device_hostname[] = "ESP-BLE-XXYYZZ-255"; 
+const char *esp_device_hostname = "ESP-BLE-XXYYZZ-99"; 
 
 static led_strip_handle_t led_strip;
 
@@ -123,7 +122,7 @@ int last_color[4] = {0, 0, 0, 0}; //last color stores luminance too
 ESPState esp_wifi_state = STATE_DISCONNECTED;
 ESPState esp_mqtt_state = STATE_DISCONNECTED;
 ESPState esp_ble_state = STATE_DISCONNECTED;
-ESPState esp_whoim_state = STATE_WHOIM_UNDEFINED;
+ESPState esp_whoim_state = STATE_DISCONNECTED;
 
 esp_mqtt_client_handle_t mqtt_client;
 static uint16_t ble_connection_handle = BLE_HS_CONN_HANDLE_NONE;
@@ -133,28 +132,6 @@ static uint16_t ble_write_handle = BLE_HS_CONN_HANDLE_NONE;
 #include "utils.c"
 #include "rgb_tally_functions.c"
 
-void update_esp_name_id(int id) {
-    // Ensure id fits within three digits
-    assert(id >= 0 && id <= 999);
-
-    // Replace 255 with ID with trailing zero
-    snprintf((char *)(esp_device_hostname + 21), 4, "%03d", id);
-
-    // Print the modified string
-    printf("Updated Hostname: %s\n", esp_device_hostname);
-}
-
-void update_esp_name_mac(const uint8_t *mac_address) {
-    // Update MAC address in the hostname
-    snprintf((char *)(esp_device_hostname + 8), 8, "%02X%02X%02X", mac_address[3], mac_address[4], mac_address[5]);
-
-    // Null terminate the string (just to be sure)
-    esp_device_hostname[14] = '\0';
-
-    // Print the modified string
-    printf("Updated Hostname with MAC: %s\n", esp_device_hostname);
-}
-
 void BLE_notifyMqtt(uint8_t id) {
     if(esp_mqtt_state != STATE_CONNECTED){
         ESP_LOGE(BLE_TAG,"needPasskeyNofify MQTT NOT CONNECTED");
@@ -162,13 +139,14 @@ void BLE_notifyMqtt(uint8_t id) {
     }
     //BLE is custom notification and is defined in PROTOCOL
     //struct is consitent we change only last byte
-    const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x00, 0x00, 0x00, id};
+    const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x01, 0x01, 0x00, id};
 
     ESP_LOGW(BLE_TAG,"needPasskeyNofify");
 
     esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0);
 }
 
+int hearbbeat_counter = 0;
 void BLE_onReceive(const struct os_mbuf *om){
     if(esp_mqtt_state != STATE_CONNECTED){
         return;
@@ -178,9 +156,45 @@ void BLE_onReceive(const struct os_mbuf *om){
     
     if (data != NULL) {
         os_mbuf_copydata(om, 0, data_len, data);
-        if(data[4] == 9 && data[5] == 0){ // 4 means operation type timecode 5 means thick
+        if(data[4] == 9 && data[5] == 0){ // 9 means operation type timecode 0 means thick
             //ESP_LOGW(BLE_TAG,"DATA Timecode Thick");
+            if (hearbbeat_counter == 15) {
+                hearbbeat_counter = 0;
+                esp_mqtt_client_enqueue(mqtt_client, "/system/heartbeat", (const char *)esp_device_hostname, sizeof(esp_device_hostname), 0, 0, true); //true means store for non-block
+            }
+            hearbbeat_counter++;
             return;
+        }
+        // META tag CAMERA is on 0c 05 
+        // ff 05 00 00 0c 05 05 02 38 ...
+        if(data[4] == 0x0c && data[5] == 0x05){
+            size_t len = data[1];  
+            int camera_id = 0;
+            int firstDigit = 0;
+            int secondDigit = 0;
+            ESP_LOGW(APP_TAG,"META Camera ID was changed %zu / %zu", len, data_len);
+            if (len > 1) {
+                if(data[8] >= '0' && data[8] <= '9' && data[9] >= '0' && data[9] <= '9'){
+                    //two digid
+                    firstDigit = data[8] - '0';
+                    secondDigit = data[9] - '0';
+                }else if(data[8] >= '0' && data[8] <= '9'){
+                    firstDigit = 0;
+                    secondDigit = data[8] - '0';
+                }           
+            }else{
+                if(data[8] >= '0' && data[8] <= '9'){
+                    firstDigit = 0;
+                    secondDigit = data[8] - '0';
+                }
+            }
+            // Combine the digits to form a two-digit number
+            if((firstDigit * 10 + secondDigit) > 0 && (firstDigit * 10 + secondDigit) < 99){
+                who_im = firstDigit * 10 + secondDigit;
+            }else{
+                who_im = 99;
+            }
+            update_esp_name();
         }
         ESP_LOG_BUFFER_HEX("DATA", data, data_len); //Log is formated to 16 bytes per LINE
         // send data to mqtt using enqueue whis is async-like behavior
@@ -197,6 +211,7 @@ void BLE_onReceive(const struct os_mbuf *om){
 ////////
 #include "gatt/gatt_client.c"
 ////////
+
 void BLE_sendPasskey(uint32_t passkey){
     if(esp_ble_state != STATE_CONNECTING && esp_ble_state != STATE_PASSCODE){
         ESP_LOGE(APP_TAG,"Passkey STATE_CONNECTING ? rc=%d", esp_ble_state);
@@ -222,7 +237,7 @@ void BLE_sendRemoveBond(){
     ble_store_util_delete_oldest_peer();
 }
 void BLE_sendConnect(uint8_t *addr){
-    if(esp_ble_state != STATE_DISCONNECTED){
+    if(esp_ble_state == STATE_CONNECTING || esp_ble_state == STATE_CONNECTED || esp_ble_state == STATE_PASSCODE){
         return;
     }
     connect_to_addr(addr);
@@ -248,11 +263,11 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_state = STATE_CONNECTING;
+        //do_signal_no_period(pink);
         esp_wifi_connect();
-        do_signal_no_period(pink);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         if (s_retry_num < ESP_MAXIMUM_RETRY) {
-            do_signal_no_period(pink);
+            //do_signal_no_period(pink);
             esp_wifi_state = STATE_CONNECTING;
             esp_wifi_connect();
             s_retry_num++;
@@ -260,7 +275,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             //nemozem posielat bit pretoze to ukonci proces wifi
         } else {
             esp_wifi_state = STATE_DISCONNECTED;
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            //xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
         ESP_LOGE(WIFI_TAG,"connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
@@ -268,14 +283,15 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         ESP_LOGW(WIFI_TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         esp_wifi_state = STATE_CONNECTED;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        //xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
 
 
 static void  wifi_init_sta(void)
 {
-    s_wifi_event_group = xEventGroupCreate();
+    esp_wifi_state = STATE_CONNECTING;
+    //s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
 
@@ -306,10 +322,10 @@ static void  wifi_init_sta(void)
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by wifi_event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_FAIL_BIT | WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    //EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_FAIL_BIT | WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
 
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
-     * happened. */
+     * happened. 
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(WIFI_TAG, "connected to ap SSID:%s password:%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
     } else if (bits & WIFI_FAIL_BIT) {
@@ -318,10 +334,11 @@ static void  wifi_init_sta(void)
         ESP_LOGE(WIFI_TAG, "UNEXPECTED EVENT");
     }
 
-    /* The event will not be processed after unregister */
+    // The event will not be processed after unregister
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
     vEventGroupDelete(s_wifi_event_group);
+    */
 }
 
 static void MQTT_onReceiveTally(esp_mqtt_event_handle_t event){
@@ -467,7 +484,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             esp_mqtt_state = STATE_CONNECTED;
             //esp_mqtt_client_enqueue is non-blocking
             //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html?highlight=mqtt
-            esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)esp_mac_address, sizeof(esp_mac_address), 0, 0, true); //true means store for non-block
+            esp_mqtt_client_enqueue(client, "/system/heartbeat", (const char *)esp_device_hostname, sizeof(esp_device_hostname), 0, 0, true); //true means store for non-block
             //ESP_LOGI(APP_TAG, "sent publish successful, msg_id=%d", msg_id);
             esp_mqtt_client_subscribe(client, MQTT_UPSTREAM_TOPIC, 0);
             break;
@@ -525,7 +542,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 }
             break;
         case MQTT_EVENT_ERROR:
-            // TODO catch connecing error to set connecting state
+            // TODO catch some error to set connecting state
             //ESP_LOGI(APP_TAG, "MQTT_EVENT_CONNECTING");
             //esp_wifi_state = STATE_CONNECTING;
             
@@ -546,6 +563,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 static void mqtt_app_start(void)
 {
+    esp_mqtt_state = STATE_CONNECTING;
+    //
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = ESP_MQTT_HOST_URI,
     };
@@ -555,7 +574,6 @@ static void mqtt_app_start(void)
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(mqtt_client);
-    esp_mqtt_state = STATE_CONNECTING;
 }
 
 
@@ -578,11 +596,11 @@ void loopWifi(){
     int timeout = 300;
     ESP_LOGE(APP_TAG, "loopWifi not established ....");
     while (esp_wifi_state != STATE_TIMEOUT && esp_wifi_state != STATE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
-        do_signal_blink_panic(pink);
+        do_signal_blink_panic(red);
     }
     if(esp_wifi_state != STATE_CONNECTED){
         esp_wifi_state = STATE_TIMEOUT;
-        do_signal(pink);
+        do_signal(red);
     }else{
         do_signal(gray);
     }
@@ -590,6 +608,7 @@ void loopWifi(){
 
 void loopMQTT(){
     if(esp_mqtt_state == STATE_CONNECTED || esp_mqtt_state == STATE_TIMEOUT){
+        vTaskDelay(10);
         return;
     }
     uint64_t startTime = millis();
@@ -608,6 +627,7 @@ void loopMQTT(){
 
 void loopBLE(){
     if(esp_ble_state == STATE_CONNECTED || esp_ble_state == STATE_TIMEOUT){
+        vTaskDelay(10);
         return;
     }
     uint64_t startTime = millis();
@@ -626,12 +646,16 @@ void loopBLE(){
 }
 
 void loopWhoim(){
-    if(who_im != 255 || esp_whoim_state == STATE_CONNECTED || esp_whoim_state == STATE_TIMEOUT){
+    if(who_im != 255 || esp_whoim_state == STATE_CONNECTED){ //whoim without timeout!!! whoim is essential
+        vTaskDelay(10);
         return;
     }
     uint64_t startTime = millis();
     int timeout = 3;
     ESP_LOGE(APP_TAG, "loopWhoim not established ....");
+    //setup notification data
+    //const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x01, 0x01, 0x00, 0x00};
+
     while ( who_im == 255 && esp_whoim_state != STATE_TIMEOUT && esp_whoim_state != STATE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(violet);
     }
@@ -648,8 +672,6 @@ void app_main(void)
     ESP_LOGI(APP_TAG, "\n\n\n\n\nStartup...\n\n\n\n\n");
 
     esp_read_mac(esp_mac_address, ESP_MAC_WIFI_STA);
-    update_esp_name_mac(esp_mac_address);
-    update_esp_name_id(who_im);
     //esp_device_hostname = esp_device_hostname_;
 
     ESP_LOGW(APP_TAG, "\n\n\nESP ID: %s\n\n\n", esp_device_hostname);
@@ -694,71 +716,64 @@ void app_main(void)
     if(luminance < 0){
         luminance = 255;
     }
-    key = "whoim";
+    key = "who_im";
     who_im = get_integer_value(key);
     if(who_im < 0 || who_im > 254){
         who_im = 255;
     }
+    //
+    update_esp_name();
+    //
 
-    
-    wifi_init_sta();
-    
+
+    // start the app
+    wifi_init_sta(); 
+    loopWifi();
     if (esp_wifi_state != STATE_CONNECTED) {
-        loopWifi();
-        if (esp_wifi_state != STATE_CONNECTED) {
-            ESP_LOGE(APP_TAG, "WIFI ... DIE DIE ....");
-            stopESP();
-            return; //die
-        }
+        ESP_LOGE(APP_TAG, "WIFI ... DIE ...");
+        stopESP();
+        return; //die
     }
 
     mqtt_app_start();
-
+    loopMQTT();
     if (esp_mqtt_state != STATE_CONNECTED) {
-        loopMQTT();
-        if (esp_mqtt_state != STATE_CONNECTED) {
-            //the time for WHOIM is 15 minutes, then die
-            ESP_LOGE(APP_TAG, "MQTT ... DIE ...");
-            stopESP();
-            return; //die
-        }
-    }
-    
-    if (esp_whoim_state != STATE_CONNECTED) {
-        loopWhoim();
-        if (esp_whoim_state != STATE_CONNECTED) {
-            ESP_LOGE(APP_TAG, "WHOIM ... DIE ...");
-            //the time for WHOIM is 15 minutes, then die we will use 255, dont die
-            //stopESP();
-            //return; //die
-        }
+        //the time for WHOIM is 15 minutes, then die
+        ESP_LOGE(APP_TAG, "MQTT ... DIE ...");
+        stopESP();
+        return; //die
     }
 
     ble_app_start();
-
+    loopBLE();
     if (esp_ble_state != STATE_CONNECTED) {
-        loopBLE();
-        if (esp_ble_state != STATE_CONNECTED) {
-            //ESP_LOGE(APP_TAG, "BLE ... DIE DIE ....");
-            //stopESP(); //BLE does not stop ESP, we still have Wifi and MQTT connection, we can use it as TALLY only.
-            //return; //die
-            //BLE is not connected in time so we deinti the stack to save some CPU/RAM
-            //ble_stack_deinit();
+        //BLE is not connected intime so we deinit the stack to save some CPU/RAM
+        ble_stack_deinit();
+        //stopESP(); //BLE does not stop ESP, we still have Wifi and MQTT connection, we can use it as TALLY only.
+        //return; //die
+    }
+
+    // there is two options to set who_im via Blackmagic Camera in Project first two chars have to be int
+    // or exchange who_im from MQTT
+    // because the target for this project is BM camera we try to obtain the ID from BLE first (on BLE init)
+    // if who_im is obtained from Camera who_im is already set and loopWhoim will do not break the loop
+    // if not there is no reason to continue because ESP do not know what Camera ID needs follow for tally ar for CCU
+    loopWhoim();
+    if (esp_whoim_state != STATE_CONNECTED) {
+        ESP_LOGE(APP_TAG, "WHOIM ... DIE ...");
+        //Whoim is essential we will wait until whoim will be set
+        while(esp_whoim_state != STATE_CONNECTED){
+            loopWhoim();
+            vTaskDelay(5000);
         }
     }
 
     check_signaling();
-    bool on = 0;
-    uint8_t data_array[12];
-
-
-    vTaskDelay(30000);
-
-    BLE_sendUnsubscribe();
-
-
+    //bool on = 0; //for testing purpose
+    // uint8_t data_array[12]; //for testing purpose
 
     while (1) {
+        // This is only for testing purpose
         /*
         if(esp_ble_state == STATE_CONNECTED){
             if (on) {
@@ -773,13 +788,12 @@ void app_main(void)
             BLE_sendData(data_array);    
         }
         */
-     
 
-
-        //loopWhoim();
-        //loopWifi();
-        //loopMQTT(); 
-        //loopBLE(); 
-        vTaskDelay(1000);
+        // essential to keep status of all services
+        loopWifi();
+        loopMQTT(); 
+        loopBLE(); 
+        loopWhoim();
+        vTaskDelay(5000); // every 5 seconds
     }
 }

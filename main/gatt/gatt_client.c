@@ -611,7 +611,6 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
                 esp_ble_state = STATE_CONNECTED;
                 return start_peer_discovery(event, arg);
                 break;
-            case 1284:
             case 14:
             case 13: //status 13 passkey timeout
                 // wrong or not defined passcode
