@@ -238,16 +238,8 @@ static void blecent_write_name(const struct peer *peer){
         goto err;
     }else{
         MODLOG_DFLT(WARN, "[ BLECENT ] OK: Peer HAVE DeviceName_UUID\n");
-        const char *myString = ble_svc_gap_device_name();
-        size_t arraySize = strlen(myString);
-        // Allocate an array of uint8_t to store the converted values
-        uint8_t uint_name[arraySize];
-        // Convert the string to uint8_t array
-        stringToUint8Array(myString, uint_name, arraySize);
 
-        ESP_LOGW(BLE_TAG, "Device name %s", uint_name);
-
-        rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, &uint_name, sizeof(uint_name), NULL, NULL);
+        rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle, esp_device_hostname, strlen(esp_device_hostname), NULL, NULL);
         if (rc != 0) {
             MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Failed to WRITE characteristic; DeviceName_UUID rc = %d\n", rc);
             goto err;
