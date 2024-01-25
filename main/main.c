@@ -709,15 +709,15 @@ void app_main(void)
 
     //boot up luminance is at full
     //after bootup load stored luminance
-    const char* key = "key";
+    //const char* key = "key";
 
-    key = "luminance";
-    luminance = get_integer_value(key);
+    //key = "luminance";
+    luminance = get_integer_value("luminance");
     if(luminance < 0){
         luminance = 255;
     }
-    key = "who_im";
-    who_im = get_integer_value(key);
+    //key = "who_im";
+    who_im = get_integer_value("who_im");
     if(who_im < 0 || who_im > 254){
         who_im = 255;
     }
