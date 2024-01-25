@@ -91,8 +91,16 @@ static const char *LED_TAG = "[ LED ] ";
 
 static int s_retry_num = 0;
 
+// this value have to be set from BLE handshaking
+// this value determine which device this ESP represnets
+// because CCU protocol use First Byte as "destination", so like CCU data for Camera 1 have first byte set to 01
+// FF aka 255 is for broadcast for all devices
+// we start as 255 to catch all messages, after MQTT handskage we will wait to "Who I M" message from controller
+int who_im = 255; //255 means all data is for me
+int signaling = 0;
+//
 uint8_t esp_mac_address[6] = {0};
-const char *esp_device_hostname = "ESP-BLE-"; 
+char esp_device_hostname[] = "ESP-BLE-XXYYZZ-255"; 
 
 static led_strip_handle_t led_strip;
 
@@ -117,14 +125,6 @@ ESPState esp_mqtt_state = STATE_DISCONNECTED;
 ESPState esp_ble_state = STATE_DISCONNECTED;
 ESPState esp_whoim_state = STATE_WHOIM_UNDEFINED;
 
-// this value have to be set from BLE handshaking
-// this value determine which device this ESP represnets
-// because CCU protocol use First Byte as "destination", so like CCU data for Camera 1 have first byte set to 01
-// FF aka 255 is for broadcast for all devices
-// we start as 255 to catch all messages, after MQTT handskage we will wait to "Who I M" message from controller
-int who_im = 255; //255 means all data is for me
-int signaling = 0;
-
 esp_mqtt_client_handle_t mqtt_client;
 static uint16_t ble_connection_handle = BLE_HS_CONN_HANDLE_NONE;
 static uint16_t ble_write_handle = BLE_HS_CONN_HANDLE_NONE;
@@ -133,16 +133,39 @@ static uint16_t ble_write_handle = BLE_HS_CONN_HANDLE_NONE;
 #include "utils.c"
 #include "rgb_tally_functions.c"
 
+void update_esp_name_id(int id) {
+    // Ensure id fits within three digits
+    assert(id >= 0 && id <= 999);
+
+    // Replace 255 with ID with trailing zero
+    snprintf((char *)(esp_device_hostname + 21), 4, "%03d", id);
+
+    // Print the modified string
+    printf("Updated Hostname: %s\n", esp_device_hostname);
+}
+
+void update_esp_name_mac(const uint8_t *mac_address) {
+    // Update MAC address in the hostname
+    snprintf((char *)(esp_device_hostname + 8), 8, "%02X%02X%02X", mac_address[3], mac_address[4], mac_address[5]);
+
+    // Null terminate the string (just to be sure)
+    esp_device_hostname[14] = '\0';
+
+    // Print the modified string
+    printf("Updated Hostname with MAC: %s\n", esp_device_hostname);
+}
+
 void BLE_notifyMqtt(uint8_t id) {
+    if(esp_mqtt_state != STATE_CONNECTED){
+        ESP_LOGE(BLE_TAG,"needPasskeyNofify MQTT NOT CONNECTED");
+        return;
+    }
     //BLE is custom notification and is defined in PROTOCOL
     //struct is consitent we change only last byte
     const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x00, 0x00, 0x00, id};
 
     ESP_LOGW(BLE_TAG,"needPasskeyNofify");
-    if(esp_mqtt_state != STATE_CONNECTED){
-        ESP_LOGE(BLE_TAG,"needPasskeyNofify MQTT NOT CONNECTED");
-        return;
-    }
+
     esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0);
 }
 
@@ -186,14 +209,35 @@ void BLE_sendPasskey(uint32_t passkey){
     ble_sm_inject_io(ble_connection_handle, &io);
 }
 
+void BLE_sendUnsubscribe(){
+    if(esp_ble_state != STATE_CONNECTED){
+        return;
+    }
+    blecent_unsubscribe_subscribe_incoming();
+}
+void BLE_sendRemoveBond(){
+    if(esp_ble_state != STATE_CONNECTED && esp_ble_state != STATE_CONNECTING){
+        return;
+    }
+    ble_store_util_delete_oldest_peer();
+}
 void BLE_sendConnect(uint8_t *addr){
+    if(esp_ble_state != STATE_DISCONNECTED){
+        return;
+    }
     connect_to_addr(addr);
 }
 
 void BLE_sendDisconnect(){
+    if(esp_ble_state == STATE_DISCONNECTED){
+        return;
+    }
     ble_gap_terminate(ble_connection_handle, BLE_ERR_REM_USER_CONN_TERM);
 }
 void BLE_sendData(const uint8_t *event_data){
+    if(esp_ble_state != STATE_CONNECTED){
+        return;
+    }
     blecent_write_to_outgoing(event_data);
 }
 /*
@@ -601,18 +645,15 @@ void loopWhoim(){
 
 void app_main(void)
 {
+    ESP_LOGI(APP_TAG, "\n\n\n\n\nStartup...\n\n\n\n\n");
 
     esp_read_mac(esp_mac_address, ESP_MAC_WIFI_STA);
-    //
-    char esp_device_hostname_[strlen(esp_device_hostname)+6];
-    sprintf(esp_device_hostname_, "%s%02X%02X%02X", esp_device_hostname, esp_mac_address[3], esp_mac_address[4], esp_mac_address[5]);
-
-    esp_device_hostname = esp_device_hostname_;
+    update_esp_name_mac(esp_mac_address);
+    update_esp_name_id(who_im);
+    //esp_device_hostname = esp_device_hostname_;
 
     ESP_LOGW(APP_TAG, "\n\n\nESP ID: %s\n\n\n", esp_device_hostname);
-
-    ESP_LOGI(APP_TAG, "Startup..");
-    ESP_LOGW(APP_TAG, "ESP32 MAC: \n\n\n%02X:%02X:%02X:%02X:%02X:%02X\n\n\n",esp_mac_address[0], esp_mac_address[1], esp_mac_address[2],esp_mac_address[3], esp_mac_address[4], esp_mac_address[5]);
+    ESP_LOGW(APP_TAG, "ESP32 MAC: \n%02X:%02X:%02X:%02X:%02X:%02X\n\n\n",esp_mac_address[0], esp_mac_address[1], esp_mac_address[2],esp_mac_address[3], esp_mac_address[4], esp_mac_address[5]);
 
     ESP_LOGI(APP_TAG, "Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
     ESP_LOGI(APP_TAG, "IDF version: %s", esp_get_idf_version());
@@ -709,6 +750,14 @@ void app_main(void)
     check_signaling();
     bool on = 0;
     uint8_t data_array[12];
+
+
+    vTaskDelay(30000);
+
+    BLE_sendUnsubscribe();
+
+
+
     while (1) {
         /*
         if(esp_ble_state == STATE_CONNECTED){
