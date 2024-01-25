@@ -288,7 +288,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
 }
 
 
-static void  wifi_init_sta(void)
+static void  wifi_app_start(void)
 {
     esp_wifi_state = STATE_CONNECTING;
     //s_wifi_event_group = xEventGroupCreate();
@@ -297,6 +297,9 @@ static void  wifi_init_sta(void)
 
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
+
+    // set hostname
+    esp_netif_set_hostname(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), esp_device_hostname);
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -318,7 +321,7 @@ static void  wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(WIFI_TAG, "wifi_init_sta finished.");
+    ESP_LOGI(WIFI_TAG, "wifi_app_start finished.");
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by wifi_event_handler() (see above) */
@@ -671,10 +674,8 @@ void app_main(void)
 {
     ESP_LOGI(APP_TAG, "\n\n\n\n\nStartup...\n\n\n\n\n");
 
+    //populate the esp_mac_address
     esp_read_mac(esp_mac_address, ESP_MAC_WIFI_STA);
-    //esp_device_hostname = esp_device_hostname_;
-
-    ESP_LOGW(APP_TAG, "\n\n\nESP ID: %s\n\n\n", esp_device_hostname);
     ESP_LOGW(APP_TAG, "ESP32 MAC: \n%02X:%02X:%02X:%02X:%02X:%02X\n\n\n",esp_mac_address[0], esp_mac_address[1], esp_mac_address[2],esp_mac_address[3], esp_mac_address[4], esp_mac_address[5]);
 
     ESP_LOGI(APP_TAG, "Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
@@ -699,42 +700,30 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    //ESP_ERROR_CHECK(esp_netif_init()); /// decalred in wifi init
-    //ESP_ERROR_CHECK(esp_event_loop_create_default()); /// declared in wifi init
 
     /* Configure the peripheral according to the LED type */
     configure_led();
     store_signal(gray); //set default last color to gray
-    do_signal_last();
-
-    //boot up luminance is at full
-    //after bootup load stored luminance
-    //const char* key = "key";
-
-    //key = "luminance";
-    luminance = get_integer_value("luminance");
-    if(luminance < 0){
-        luminance = 255;
-    }
-    //key = "who_im";
+    do_signal_last(); //boot up with gray status to indicate uptime
+    //
     who_im = get_integer_value("who_im");
     if(who_im < 0 || who_im > 254){
         who_im = 255;
     }
     //
     update_esp_name();
+    ESP_LOGW(APP_TAG, "\n\n\nESP Hostname: %s\n\n\n", esp_device_hostname);
     //
 
-
     // start the app
-    wifi_init_sta(); 
+    wifi_app_start(); 
     loopWifi();
     if (esp_wifi_state != STATE_CONNECTED) {
         ESP_LOGE(APP_TAG, "WIFI ... DIE ...");
         stopESP();
         return; //die
     }
-
+    //
     mqtt_app_start();
     loopMQTT();
     if (esp_mqtt_state != STATE_CONNECTED) {
@@ -743,7 +732,7 @@ void app_main(void)
         stopESP();
         return; //die
     }
-
+    //
     ble_app_start();
     loopBLE();
     if (esp_ble_state != STATE_CONNECTED) {
@@ -752,7 +741,7 @@ void app_main(void)
         //stopESP(); //BLE does not stop ESP, we still have Wifi and MQTT connection, we can use it as TALLY only.
         //return; //die
     }
-
+    //
     // there is two options to set who_im via Blackmagic Camera in Project first two chars have to be int
     // or exchange who_im from MQTT
     // because the target for this project is BM camera we try to obtain the ID from BLE first (on BLE init)
@@ -768,6 +757,12 @@ void app_main(void)
         }
     }
 
+    //boot up luminance is at full
+    //after bootup load stored luminance
+    luminance = get_integer_value("luminance");
+    if(luminance < 0){
+        luminance = 255;
+    }
     check_signaling();
     //bool on = 0; //for testing purpose
     // uint8_t data_array[12]; //for testing purpose
