@@ -54,8 +54,8 @@
 #define LED_SHIELD_GPIO     CONFIG_ESP_LED_PIN //CONFIG_LED_SHIELD_GPIO
 #define LED_SHIELD_LENGHT   CONFIG_ESP_LED_PIN_LEN //CONFIG_LED_SHIELD_GPIO
 
-#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_SPI true //force to spi //rmt is beter on 2 cores
-#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT false
+#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_SPI false //force to spi //rmt is beter on 2 cores
+#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT true
 #define CONFIG_INTERNAL_LED_PERIOD 1000
 
 #define CUSTOM_PROTOCOL_TALLY_CATEGORY 128 //in CCU protocol this values are unused for now
@@ -99,7 +99,7 @@ int who_im = 255; //255 means all data is for me
 int signaling = 0;
 //
 uint8_t esp_mac_address[6] = {0};
-const char *esp_device_hostname = "ESP-BLE-XXYYZZ-99"; 
+char esp_device_hostname[] = "ESP-BLE-XXYYZZ-00";
 
 static led_strip_handle_t led_strip;
 
@@ -134,14 +134,15 @@ static uint16_t ble_write_handle = BLE_HS_CONN_HANDLE_NONE;
 
 void BLE_notifyMqtt(uint8_t id) {
     if(esp_mqtt_state != STATE_CONNECTED){
-        ESP_LOGE(BLE_TAG,"needPasskeyNofify MQTT NOT CONNECTED");
+        ESP_LOGE(BLE_TAG,"BLE_notifyMqtt MQTT NOT CONNECTED");
         return;
     }
     //BLE is custom notification and is defined in PROTOCOL
     //struct is consitent we change only last byte
-    const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x01, 0x01, 0x00, id};
+    //Custom: 0 = disconnected, 1 = connecting, 2 = connected, 3 = timeout, 4 = need passcode, 5 = need camera_id
+    const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x00, 0x01, 0x00, id};
 
-    ESP_LOGW(BLE_TAG,"needPasskeyNofify");
+    //ESP_LOGW(BLE_TAG,"BLE_notifyMqtt");
 
     esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0);
 }
@@ -155,19 +156,24 @@ void BLE_onReceive(const struct os_mbuf *om){
     uint8_t *data = malloc(data_len);
     
     if (data != NULL) {
+        // copy data as is recomended in CENT example
         os_mbuf_copydata(om, 0, data_len, data);
-        if(data[4] == 9 && data[5] == 0){ // 9 means operation type timecode 0 means thick
+        //
+        if(data[4] == 0x09 && data[5] == 0x00){ // 9 means operation type timecode 0 means thick
             //ESP_LOGW(BLE_TAG,"DATA Timecode Thick");
-            if (hearbbeat_counter == 15) {
+            if (hearbbeat_counter >= 15) {
                 hearbbeat_counter = 0;
                 esp_mqtt_client_enqueue(mqtt_client, "/system/heartbeat", (const char *)esp_device_hostname, sizeof(esp_device_hostname), 0, 0, true); //true means store for non-block
             }
             hearbbeat_counter++;
+            // Free the allocated buffer
+            free(data);
             return;
         }
-        // META tag CAMERA is on 0c 05 
-        // ff 05 00 00 0c 05 05 02 38 ...
+
         if(data[4] == 0x0c && data[5] == 0x05){
+            // META tag CAMERA is on 0c 05 
+            // ff 05 00 00 0c 05 05 02 38 ...
             size_t len = data[1];  
             int camera_id = 0;
             int firstDigit = 0;
@@ -196,6 +202,7 @@ void BLE_onReceive(const struct os_mbuf *om){
             }
             update_esp_name();
         }
+        //return;
         ESP_LOG_BUFFER_HEX("DATA", data, data_len); //Log is formated to 16 bytes per LINE
         // send data to mqtt using enqueue whis is async-like behavior
         // sending from camera to the operator do not have priorty
@@ -230,7 +237,7 @@ void BLE_sendUnsubscribe(){
     }
     blecent_unsubscribe_subscribe_incoming();
 }
-void BLE_sendRemoveBond(){
+void BLE_sendClearBond(){
     if(esp_ble_state != STATE_CONNECTED && esp_ble_state != STATE_CONNECTING){
         return;
     }
@@ -364,7 +371,7 @@ static void MQTT_onReceiveTally(esp_mqtt_event_handle_t event){
                 if(check_signaling()){
                     ESP_LOGW(APP_TAG, "OVERWITED BY SIGNALING > Store TALLY: PGM");
                 }else{
-                    ESP_LOGI(APP_TAG, "Signal TALLY: PGM");
+                    //ESP_LOGI(APP_TAG, "Signal TALLY: PGM");
                     do_signal(red);
                 } 
                 store_signal(red);
@@ -373,7 +380,7 @@ static void MQTT_onReceiveTally(esp_mqtt_event_handle_t event){
                 if(check_signaling()){
                     ESP_LOGW(APP_TAG, "OVERWITED BY SIGNALING > Store TALLY: PVW");
                 }else{
-                    ESP_LOGI(APP_TAG, "Signal TALLY: PVW");
+                    //ESP_LOGI(APP_TAG, "Signal TALLY: PVW");
                     do_signal(green);
                 }
                 store_signal(green);
@@ -382,7 +389,7 @@ static void MQTT_onReceiveTally(esp_mqtt_event_handle_t event){
                 if(check_signaling()){
                     ESP_LOGW(APP_TAG, "OVERWITED BY SIGNALING > Store TALLY: OFF");
                 }else{
-                    ESP_LOGI(APP_TAG, "Signal TALLY: OFF");
+                    //ESP_LOGI(APP_TAG, "Signal TALLY: OFF");
                     do_signal(gray); //we signaling off as gray wo know that tally is working even is not in pgm/pvw state
                 }   
                 store_signal(gray);
@@ -398,7 +405,7 @@ static void MQTT_onReceiveTally(esp_mqtt_event_handle_t event){
                 ESP_LOGW(APP_TAG, "OVERWITED BY SIGNALING > Signal COLOR");
             }else if(event->data[0] == who_im){
                 //for color we check the destination
-                ESP_LOGI(APP_TAG, "Signal COLOR: ");
+                //ESP_LOGI(APP_TAG, "Signal COLOR: ");
                 // set tally by color / this ignore luminance setting
                 //rgba
                 do_signal_color(event->data[8], event->data[9], event->data[10], event->data[11]);
@@ -499,17 +506,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
 
         case MQTT_EVENT_SUBSCRIBED:
-            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+            //ESP_LOGI(MQTT_TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
             break;
         case MQTT_EVENT_UNSUBSCRIBED:
-            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+            //ESP_LOGI(MQTT_TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
             break;
         case MQTT_EVENT_PUBLISHED:
-            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+            //ESP_LOGI(MQTT_TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
             break;
         case MQTT_EVENT_DATA:
             esp_mqtt_state = STATE_CONNECTED;
-            ESP_LOGI(MQTT_TAG, "MQTT_EVENT_DATA on LEN=%d TOPIC=%s\r\n", event->topic_len, event->topic);
+            //ESP_LOGI(MQTT_TAG, "MQTT_EVENT_DATA on LEN=%d TOPIC=%s\r\n", event->topic_len, event->topic);
             //because we are subscribed to the one topic, the topic is not relevant
             if(event->data_len < 8){
                 // the protocol at least 8 bytes
@@ -583,12 +590,6 @@ static void mqtt_app_start(void)
 static void ble_app_start(void){
     ESP_LOGW(APP_TAG, "Starting BLE sequence ....");
     BLEClient_app_main();
-}
-
-void stopESP(){
-    do_signal(deep);
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-    esp_deep_sleep_start();
 }
 
 void loopWifi(){
@@ -701,15 +702,17 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    /* Configure the peripheral according to the LED type */
+    // Configure the peripheral according to the LED type
     configure_led();
     store_signal(gray); //set default last color to gray
     do_signal_last(); //boot up with gray status to indicate uptime
+
     //
     who_im = get_integer_value("who_im");
     if(who_im < 0 || who_im > 254){
         who_im = 255;
     }
+    
     //
     update_esp_name();
     ESP_LOGW(APP_TAG, "\n\n\nESP Hostname: %s\n\n\n", esp_device_hostname);
@@ -720,7 +723,6 @@ void app_main(void)
     loopWifi();
     if (esp_wifi_state != STATE_CONNECTED) {
         ESP_LOGE(APP_TAG, "WIFI ... DIE ...");
-        stopESP();
         return; //die
     }
     //
@@ -729,7 +731,6 @@ void app_main(void)
     if (esp_mqtt_state != STATE_CONNECTED) {
         //the time for WHOIM is 15 minutes, then die
         ESP_LOGE(APP_TAG, "MQTT ... DIE ...");
-        stopESP();
         return; //die
     }
     //
@@ -737,16 +738,14 @@ void app_main(void)
     loopBLE();
     if (esp_ble_state != STATE_CONNECTED) {
         //BLE is not connected intime so we deinit the stack to save some CPU/RAM
-        ble_stack_deinit();
-        //stopESP(); //BLE does not stop ESP, we still have Wifi and MQTT connection, we can use it as TALLY only.
+        //ble_stack_deinit();
         //return; //die
     }
-    //
-    // there is two options to set who_im via Blackmagic Camera in Project first two chars have to be int
-    // or exchange who_im from MQTT
-    // because the target for this project is BM camera we try to obtain the ID from BLE first (on BLE init)
-    // if who_im is obtained from Camera who_im is already set and loopWhoim will do not break the loop
-    // if not there is no reason to continue because ESP do not know what Camera ID needs follow for tally ar for CCU
+    // there is a option to set who_im - via "Camera ID" in Project properties on BM camera
+    // first two chars have to be int like "1" and "2" means 12
+    // because the target for this project is BM camera we try to obtain the ID from BLE
+    // if who_im is obtained from Camera loopWhoim skips
+    // if not there is no reason to continue because ESP do not know what Camera ID needs to follow
     loopWhoim();
     if (esp_whoim_state != STATE_CONNECTED) {
         ESP_LOGE(APP_TAG, "WHOIM ... DIE ...");

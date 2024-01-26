@@ -1,4 +1,4 @@
-/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/xtensa/libxtensa.a
+/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/riscv/libriscv.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_gpio/libesp_driver_gpio.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_pm/libesp_pm.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/mbedtls/libmbedtls.a
@@ -29,12 +29,9 @@
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/app_trace/libapp_trace.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_event/libesp_event.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/nvs_flash/libnvs_flash.a
-/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_pcnt/libesp_driver_pcnt.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_spi/libesp_driver_spi.a
-/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_mcpwm/libesp_driver_mcpwm.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_i2s/libesp_driver_i2s.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/sdmmc/libsdmmc.a
-/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_sdmmc/libesp_driver_sdmmc.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_sdspi/libesp_driver_sdspi.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_rmt/libesp_driver_rmt.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/esp_driver_tsens/libesp_driver_tsens.a
@@ -75,10 +72,7 @@
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/json/libjson.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/mqtt/libmqtt.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/nvs_sec_provider/libnvs_sec_provider.a
-/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/perfmon/libperfmon.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/spiffs/libspiffs.a
-/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/touch_element/libtouch_element.a
-/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/usb/libusb.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/espressif__led_strip/libespressif__led_strip.a
 /Users/gavo/Projects/VYVOJ/arduino/btbm-tally/build/esp-idf/nimble_central_utils/libnimble_central_utils.a

@@ -259,7 +259,7 @@ static void blecent_update_name(){
     }
     const struct peer *peer;
     peer = peer_find(ble_connection_handle);
-    blecent_write_name(peer);
+    //blecent_write_name(peer);
     return;
 }
 
@@ -289,7 +289,7 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     MODLOG_DFLT(WARN, "[ BLECENT ] Service discovery complete; status = %d conn_handle = %d\n", status, peer->conn_handle);
 
     // write our name first like ESP-BLE-XXZZYY-255
-    blecent_write_name(peer);
+    //blecent_write_name(peer);
 
     // subscribe to the IncomingCameraControl_UUID
     // 2 means notifications with ACK aka INDICATIONS
@@ -368,26 +368,25 @@ void print_ble_adv_fields(struct ble_hs_adv_fields *fields) {
 
 static int check_interesting_devices(const struct ble_gap_disc_desc *disc)
 {
-    struct ble_hs_adv_fields fields;
-    int rc;
-    int i;
-
     /* The device has to be advertising connectability. */
     if (disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_ADV_IND && disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_DIR_IND) {
         return 0;
     }
 
+    struct ble_hs_adv_fields fields;
+    int rc;
     rc = ble_hs_adv_parse_fields(&fields, disc->data, disc->length_data);
     if (rc != 0) {
-        //ESP_LOGE(BLE_TAG,"NO FIELDS ON check_interesting_devices");
+        ESP_LOGE(BLE_TAG,"NO FIELDS ON check_interesting_devices");
         return 0;
     }
     
+    int i;
     for (i = 0; i < fields.num_uuids16; i++) {
-        ESP_LOGE(BLE_TAG,"FIELD > (0x%04X)", ble_uuid_u16(&fields.uuids128[i].u));
+       // ESP_LOGE(BLE_TAG,"FIELD > (0x%04X)", ble_uuid_u16(&fields.uuids128[i].u));
         if (ble_uuid_u16(&fields.uuids16[i].u) == Service_UUID) {
-            ESP_LOGE(BLE_TAG,"Blackmagic Service_UUID (0x%04X)", ble_uuid_u16(&fields.uuids16[i].u));
-            print_ble_adv_fields(&fields);
+            //ESP_LOGE(BLE_TAG,"Blackmagic Service_UUID (0x%04X)", ble_uuid_u16(&fields.uuids16[i].u));
+            //print_ble_adv_fields(&fields);
             return 1;
         }
     }
@@ -465,16 +464,23 @@ static void notify_for_new_device(void *disc)
     // if so we store ADDR into list and publish data to mqtt (addr and index)
     // TODO ? check device name and send name instead off address?
     ble_addr_t *addr;
+    struct ble_gap_disc_desc *disc_;
 
+    disc_ = disc;
     // the device is interesting
-    addr = &((struct ble_gap_disc_desc *)disc)->addr;
-    int8_t rssi = ((struct ble_gap_disc_desc *)disc)->rssi;
+    addr = &disc_->addr;
+    int8_t rssi = disc_->rssi;
     ESP_LOGI(BLE_TAG,"Device found: %s, RSSI = %d", addr_str(addr->val), (int)rssi);
     // check if device is interesting
+    if (rssi < -85) {
+        ESP_LOGW(BLE_TAG,"LOW rssi");
+        //return;
+    }
     // if not return (scanning is still active)
-    if (!check_interesting_devices((struct ble_gap_disc_desc *)disc)) {
+    if (!check_interesting_devices(disc)) {
         return;
     }
+    ESP_LOGW(BLE_TAG,"BM Found");
     // Extract and store the device name if available
     //esp_ble_gap_update_adv_data((struct ble_gap_disc_desc *)disc, ESP_BLE_AD_TYPE_NAME_CMPL, discovered_devices[discovered_devices_count].name);
     
@@ -530,7 +536,6 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
 
     switch (event->type) {
     case BLE_GAP_EVENT_DISC:
-        esp_ble_state = STATE_CONNECTING;
         ESP_LOGI(BLE_TAG, "blecent_gap_event BLE_GAP_EVENT_DISC");
         /* Try to connect to the advertiser if it looks interesting. */
         notify_for_new_device(&event->disc);
@@ -538,6 +543,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_CONNECT:
         esp_ble_state = STATE_CONNECTING;
+        BLE_notifyMqtt(0x01);
         /* A new connection was established or a connection attempt failed. */
         if (event->connect.status == 0) {
             /* Connection successfully established. */
@@ -555,20 +561,21 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
             //store ble_connection_handle globally
             ble_connection_handle = event->connect.conn_handle;
             return start_security(event, arg);
-        } else {
-            /* Connection attempt failed; resume scanning. */
-            esp_ble_state = STATE_DISCONNECTED;
-            MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Connection failed; status = %d\n", event->connect.status);
-            //blecent_scan();
         }
+
+        BLE_notifyMqtt(0x00);
+        /* Connection attempt failed; resume scanning. */
+        esp_ble_state = STATE_DISCONNECTED;
+        MODLOG_DFLT(ERROR, "[ BLECENT ] Error: Connection failed; status = %d\n", event->connect.status);
+        //blecent_scan();
         return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI(BLE_TAG, "blecent_gap_event BLE_GAP_EVENT_DISCONNECT");
         /* Connection terminated. */
-        MODLOG_DFLT(INFO, "[ BLECENT ] disconnect; reason = %d ", event->disconnect.reason);
+        //MODLOG_DFLT(INFO, "[ BLECENT ] disconnect; reason = %d ", event->disconnect.reason);
         blecent_print_conn_desc(&event->disconnect.conn);
-        MODLOG_DFLT(INFO, "[ BLECENT ] \n");
+        //MODLOG_DFLT(INFO, "[ BLECENT ] \n");
 
         /* Forget about peer. */
         peer_delete(event->disconnect.conn.conn_handle);
@@ -578,23 +585,24 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
              blecent_scan();
         }
         esp_ble_state = STATE_DISCONNECTED;
+        BLE_notifyMqtt(0x00);
         return 0;
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
-        esp_ble_state = STATE_DISCONNECTED;
         ESP_LOGI(BLE_TAG, "blecent_gap_event BLE_GAP_EVENT_DISC_COMPLETE");
         MODLOG_DFLT(INFO, "[ BLECENT ] discovery complete; reason = %d\n", event->disc_complete.reason);
         return 0;
 
     case BLE_GAP_EVENT_ENC_CHANGE:
-        esp_ble_state = STATE_CONNECTING;
+        //
+        struct ble_gap_conn_desc desc;
+        int rc;
+        //
         ESP_LOGI(BLE_TAG, "blecent_gap_event BLE_GAP_EVENT_ENC_CHANGE encryption change event; status = %d", event->enc_change.status);
         //status have to be 0
         switch(event->enc_change.status){
             case 0:
-                struct ble_gap_conn_desc desc;
-                int rc;
-                /* Encryption has been enabled or disabled for this connection. */
+                // success
                 rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
                 assert(rc == 0);
                 MODLOG_DFLT(INFO, "[ BLECENT ] Encryption has been enabled or disabled for this connection \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
@@ -602,21 +610,16 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
                 MODLOG_DFLT(INFO, "[ BLECENT ] \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
                 esp_ble_state = STATE_CONNECTED;
                 return start_peer_discovery(event, arg);
-                break;
-            case 14:
+            case 14: //status 14 wrong passkey
             case 13: //status 13 passkey timeout
-                // wrong or not defined passcode
-                // just try again
-                esp_ble_state = STATE_TIMEOUT;
-                return BLE_GAP_EVENT_REATTEMPT_COUNT;
-                break;
-            default:
-                // non zero and non defined terminate the connection
                 ESP_LOGE(BLE_TAG, "\n\n\n\nDELETE BONDING\n\n\n\nBLE_GAP_EVENT_ENC_CHANGE status = %d", event->enc_change.status);
-                /* Delete the old bond. */
                 rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
                 assert(rc == 0);
                 ble_store_util_delete_peer(&desc.peer_id_addr);
+                esp_ble_state = STATE_TIMEOUT;
+                return BLE_GAP_EVENT_REATTEMPT_COUNT;
+            default:
+                // non zero and non defined terminate the connection
                 /* Forget about peer. */
                 peer_delete(event->enc_change.conn_handle);
                 //terminate connection
@@ -629,10 +632,8 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_NOTIFY_RX:
         //ESP_LOGI(BLE_TAG, "\nblecent_gap_event BLE_GAP_EVENT_NOTIFY_RX");
-        /* Peer sent us a notification or indication. */
-        MODLOG_DFLT(INFO, "[ BLECENT ] received %s; conn_handle = %d attr_handle = %d attr_len = %d" , event->notify_rx.indication ? "indication" : "notification", event->notify_rx.conn_handle, event->notify_rx.attr_handle, OS_MBUF_PKTLEN(event->notify_rx.om));
-        /* Attribute data is contained in event->notify_rx.om. Use
-         * `os_mbuf_copydata` to copy the data received in notification mbuf */
+        //MODLOG_DFLT(INFO, "[ BLECENT ] received %s; conn_handle = %d attr_handle = %d attr_len = %d" , event->notify_rx.indication ? "indication" : "notification", event->notify_rx.conn_handle, event->notify_rx.attr_handle, OS_MBUF_PKTLEN(event->notify_rx.om));
+        // Attribute data is contained in event->notify_rx.om. Use os_mbuf_copydata` to copy the data received in notification mbuf
         // Log the data from the notify_rx event
         //blecent_log_mbuf(event->notify_rx.om);
         BLE_onReceive(event->notify_rx.om);
@@ -644,13 +645,13 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
         return 0;
 
     case BLE_GAP_EVENT_REATTEMPT_COUNT:
-        ESP_LOGW("GAP_EVENT", "\n\n\n\n\n\nblecent_gap_event 29 TRY IT AGAIN %d\n\n\n\n\n\n",event->type);
+        //ESP_LOGW("GAP_EVENT", "\n\n\n\n\n\nblecent_gap_event 29 TRY IT AGAIN %d\n\n\n\n\n\n",event->type);
         //i think from my experience that 29 means --- your last try ends with no reason.. if you really want connect do it again
         return BLE_GAP_EVENT_REATTEMPT_COUNT;
     case BLE_GAP_EVENT_REPEAT_PAIRING:
     //case 29:
         
-        ESP_LOGI("GAP_EVENT", "blecent_gap_event BLE_GAP_EVENT_REPEAT_PAIRING");
+        //ESP_LOGI("GAP_EVENT", "blecent_gap_event BLE_GAP_EVENT_REPEAT_PAIRING");
         /* We already have a bond with the peer, but it is attempting to
          * establish a new secure link.  This app sacrifices security for
          * convenience: just throw away the old bond and accept the new link.
@@ -670,16 +671,16 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI("GAP_EVENT", "BLE_GAP_EVENT_PASSKEY_ACTION Passkey action required!");
         esp_ble_state = STATE_PASSCODE;
         // Request user input for the 6-digit passcode and convert it to integer
-        BLE_notifyMqtt(0x03); //global notification 0x03 means need pass
+        BLE_notifyMqtt(0x04);
         return 0;
     case BLE_GAP_EVENT_IDENTITY_RESOLVED:
-        ESP_LOGI("GAP_EVENT", "BLE_GAP_EVENT_IDENTITY_RESOLVED");
+        //ESP_LOGI("GAP_EVENT", "BLE_GAP_EVENT_IDENTITY_RESOLVED");
         return 0;    
     case BLE_GAP_EVENT_EXT_DISC:
-        ESP_LOGI("GAP_EVENT", "BLE_GAP_EVENT_EXT_DISC");
+        //ESP_LOGI("GAP_EVENT", "BLE_GAP_EVENT_EXT_DISC");
         return 0;
     case BLE_GAP_EVENT_PHY_UPDATE_COMPLETE:
-        ESP_LOGI("GAP_EVENT", "blecent_gap_event BLE_GAP_EVENT_PHY_UPDATE_COMPLETE %d",event->type);
+        //ESP_LOGI("GAP_EVENT", "blecent_gap_event BLE_GAP_EVENT_PHY_UPDATE_COMPLETE %d",event->type);
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
@@ -806,10 +807,11 @@ void BLEClient_app_main(void)
     //ble_hs_cfg.auth_req = BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM;
 
     /* Initialize data structures to track connected peers. */
-    rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 32, 32, 32);
+    rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 64, 64, 64);
     assert(rc == 0);
 
     rc = ble_svc_gap_device_name_set(esp_device_hostname);
+    ESP_LOGW(BLE_TAG, "esp_device_hostname rc=%d", rc);
     assert(rc == 0);
 
     /* XXX Need to have template for store */

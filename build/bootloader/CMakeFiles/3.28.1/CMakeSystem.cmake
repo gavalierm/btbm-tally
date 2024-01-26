@@ -3,7 +3,7 @@ set(CMAKE_HOST_SYSTEM_NAME "Darwin")
 set(CMAKE_HOST_SYSTEM_VERSION "23.2.0")
 set(CMAKE_HOST_SYSTEM_PROCESSOR "arm64")
 
-include("/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/tools/cmake/toolchain-esp32s3.cmake")
+include("/Users/gavo/Projects/VYVOJ/arduino/btbm-tally/esp-idf/tools/cmake/toolchain-esp32c3.cmake")
 
 set(CMAKE_SYSTEM "Generic")
 set(CMAKE_SYSTEM_NAME "Generic")
