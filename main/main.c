@@ -41,7 +41,7 @@
 #include "driver/gpio.h"
 #include "led_strip.h"
 
-#define LOGGING 1
+#define LOGGING true
 
 #define MQTT_DOWNSTREAM_TOPIC "/btmqtt/ccu/raw/downstream"
 #define MQTT_UPSTREAM_TOPIC "/btmqtt/ccu/raw/upstream"
@@ -54,8 +54,8 @@
 #define LED_SHIELD_GPIO     CONFIG_ESP_LED_PIN //CONFIG_LED_SHIELD_GPIO
 #define LED_SHIELD_LENGHT   CONFIG_ESP_LED_PIN_LEN //CONFIG_LED_SHIELD_GPIO
 
-#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_SPI false //force to spi //rmt is beter on 2 cores
-#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT true
+#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_SPI false //force to spi 
+#define CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT true //rmt is beter on 2 cores?
 #define CONFIG_INTERNAL_LED_PERIOD 1000
 
 #define CUSTOM_PROTOCOL_TALLY_CATEGORY 128 //in CCU protocol this values are unused for now
@@ -87,6 +87,37 @@ static const char *MQTT_TAG = "[ MQTT ] ";
 static const char *WHOIM_TAG = "[ WHOIM ] ";
 static const char *WIFI_TAG = "[ WIFI ] ";
 static const char *LED_TAG = "[ LED ] ";
+
+#define CONFIG_EXAMPLE_EXTENDED_ADV 0
+#define MAX_DISC_DEVICES 10
+
+#ifndef ESP_BD_ADDR_LEN
+#define ESP_BD_ADDR_LEN 6
+#endif
+#ifndef ESP_BLE_ADV_DATA_LEN_MAX
+#define ESP_BLE_ADV_DATA_LEN_MAX 20 // Maximum length of the device name
+#endif
+
+typedef struct {
+    uint8_t addr[ESP_BD_ADDR_LEN];
+    char name[ESP_BLE_ADV_DATA_LEN_MAX]; // Assume maximum length for simplicity
+} ble_device_t;
+
+#define Service_UUID 0x1800
+
+#define DeviceInformation_UUID 0x180A
+#define CameraManufacturer_UUID 0x2A29
+#define CameraModel_UUID 0x2A24
+
+static const ble_uuid_t * CameraService_UUID = BLE_UUID128_DECLARE(0xD3,0x93,0xA8,0x0C,0xF3,0x86,0x77,0x8B,0xE6,0x11,0x75,0x6D,0x7A,0x56,0x1D,0x29);
+
+static const ble_uuid_t * Timecode_UUID = BLE_UUID128_DECLARE(0xC8,0x76,0xE9,0x87,0x1D,0x45,0xFB,0x9A,0xBF,0x41,0xF1,0x86,0x10,0x21,0x8F,0x6D );
+static const ble_uuid_t * OutgoingCameraControl_UUID = BLE_UUID128_DECLARE(0xbb,0xe1,0xf8,0xa2,0xec,0xd2,0x93,0x84,0x99,0x42,0xee,0x1a,0x5f,0x46,0xd3,0x5d);
+static const ble_uuid_t * IncomingCameraControl_UUID = BLE_UUID128_DECLARE(0xd9,0x37,0x45,0x50,0x76,0x58,0x30,0xbf,0x6a,0x41,0xa0,0x76,0x40,0xe1,0x64,0xb8 );
+static const ble_uuid_t * DeviceName_UUID = BLE_UUID128_DECLARE(0x9c,0xb8,0x2e,0x28,0x76,0xcc,0x63,0xb0,0xa0,0x41,0xfb,0xc9,0x52,0x0c,0xac,0xff );
+static const ble_uuid_t * CameraStatus_UUID = BLE_UUID128_DECLARE(0xB9,0x51,0x9B,0x33,0x74,0xCA,0xBD,0x8A,0xC5,0x4F,0xDC,0x95,0x1D,0x69,0xE8,0x7F );
+static const ble_uuid_t * ProtocolVersion_UUID = BLE_UUID128_DECLARE(0x06,0x27,0xEE,0x2B,0x39,0x3D,0x82,0x8F,0x6F,0x45,0x08,0xB5,0x18,0xD0,0x1F,0x8F);
+
 
 static int s_retry_num = 0;
 
@@ -352,6 +383,7 @@ static void  wifi_app_start(void)
 }
 
 static void MQTT_onReceiveTally(esp_mqtt_event_handle_t event){
+    //FF 05 00 00 81 03 00 00 505b06 00 //pass
     //ESP_LOGW(APP_TAG, "MQTT_onReceiveTally: ");
     switch (event->data[5]) {
         case 0:

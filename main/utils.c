@@ -30,6 +30,7 @@ int get_integer_value(const char* key) {
     return value;
 }
 
+
 void update_esp_name(){
     // Ensure id fits within three digits
     if(who_im <= 0 || who_im > 99){
@@ -38,6 +39,8 @@ void update_esp_name(){
     snprintf(esp_device_hostname + 8, sizeof(esp_device_hostname) - 8, "%02X%02X%02X-%02d", esp_mac_address[3], esp_mac_address[4], esp_mac_address[5], who_im);
     //ESP_LOGW(APP_TAG, "Updated Hostname: %s\n", esp_device_hostname);
     store_integer_value("who_im", who_im);
+
+    //blecent_update_name(); i tried to update BLE device name but BM camera reject write to this CHR after init
 }
 
 // Function to convert raw data to a hexadecimal string with spaces and log using ESP_LOGI

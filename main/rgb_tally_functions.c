@@ -25,7 +25,11 @@ static void do_signal_color(int red, int green, int blue, int luma){
     blue = (blue * luma) / 255;
 
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-    led_strip_set_pixel(led_strip, 0, green, red, blue); //GBR
+    for (int i = 0; i < LED_SHIELD_LENGHT; ++i)
+    {
+       led_strip_set_pixel(led_strip, i, red, green, blue); //GRB
+    }
+    
     /* Refresh the strip to send data */
     led_strip_refresh(led_strip);
 }
@@ -125,19 +129,28 @@ static void store_signal_color(int red, int green, int blue, int luma){
 
 static void configure_led(void)
 {
-    ESP_LOGI(LED_TAG, "Example configured to do_signal addressable LED!");
+    ESP_LOGI(LED_TAG, "Configure addressable LED!");
     /* LED strip initialization with the GPIO and pixels number*/
+#if CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT
     led_strip_config_t strip_config = {
         .strip_gpio_num = LED_SHIELD_GPIO,
         .max_leds = LED_SHIELD_LENGHT, // at least one LED on board
+        .led_pixel_format = LED_PIXEL_FORMAT_GRB, // Pixel format of your LED strip
+        .led_model = LED_MODEL_WS2812 // LED strip model
     };
-#if CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_RMT
+    //
     led_strip_rmt_config_t rmt_config = {
         .resolution_hz = 10 * 1000 * 1000, // 10MHz
         .flags.with_dma = false,
     };
     ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
 #elif CONFIG_INTERNAL_LED_LED_STRIP_BACKEND_SPI
+    led_strip_config_t strip_config = {
+        .strip_gpio_num = LED_SHIELD_GPIO,
+        .max_leds = LED_SHIELD_LENGHT, // at least one LED on board
+        .led_pixel_format = LED_PIXEL_FORMAT_GRB, // Pixel format of your LED strip
+        .led_model = LED_MODEL_WS2812 // LED strip model
+    };
     led_strip_spi_config_t spi_config = {
         .spi_bus = SPI2_HOST,
         .flags.with_dma = true,

@@ -1,38 +1,3 @@
-#define CONFIG_EXAMPLE_EXTENDED_ADV 0
-#define MAX_DISC_DEVICES 10
-
-#ifndef ESP_BD_ADDR_LEN
-#define ESP_BD_ADDR_LEN 6
-#endif
-#ifndef ESP_BLE_ADV_DATA_LEN_MAX
-#define ESP_BLE_ADV_DATA_LEN_MAX 20 // Maximum length of the device name
-#endif
-
-typedef struct {
-    uint8_t addr[ESP_BD_ADDR_LEN];
-    char name[ESP_BLE_ADV_DATA_LEN_MAX]; // Assume maximum length for simplicity
-} ble_device_t;
-
-#define Service_UUID 0x1800
-
-#define DeviceInformation_UUID 0x180A
-#define CameraManufacturer_UUID 0x2A29
-#define CameraModel_UUID 0x2A24
-
-//static const ble_uuid_t * DeviceInformationService = BLE_UUID128_DECLARE(0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0x80, 0x5f, 0x9b, 0x34, 0xfb );
-//static const ble_uuid_t * DeviceInformationServiceV2 = BLE_UUID128_DECLARE(0x00, 0x00, 0x18, 0x0a, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0x80, 0x5f, 0x9b, 0x34, 0xfb );
-
-// this characteristic is interesting
-// reverse
-static const ble_uuid_t * CameraService_UUID = BLE_UUID128_DECLARE(0xD3,0x93,0xA8,0x0C,0xF3,0x86,0x77,0x8B,0xE6,0x11,0x75,0x6D,0x7A,0x56,0x1D,0x29);
-
-static const ble_uuid_t * Timecode_UUID = BLE_UUID128_DECLARE(0xC8,0x76,0xE9,0x87,0x1D,0x45,0xFB,0x9A,0xBF,0x41,0xF1,0x86,0x10,0x21,0x8F,0x6D );
-static const ble_uuid_t * OutgoingCameraControl_UUID = BLE_UUID128_DECLARE(0xbb,0xe1,0xf8,0xa2,0xec,0xd2,0x93,0x84,0x99,0x42,0xee,0x1a,0x5f,0x46,0xd3,0x5d);
-static const ble_uuid_t * IncomingCameraControl_UUID = BLE_UUID128_DECLARE(0xd9,0x37,0x45,0x50,0x76,0x58,0x30,0xbf,0x6a,0x41,0xa0,0x76,0x40,0xe1,0x64,0xb8 );
-static const ble_uuid_t * DeviceName_UUID = BLE_UUID128_DECLARE(0x9c,0xb8,0x2e,0x28,0x76,0xcc,0x63,0xb0,0xa0,0x41,0xfb,0xc9,0x52,0x0c,0xac,0xff );
-static const ble_uuid_t * CameraStatus_UUID = BLE_UUID128_DECLARE(0xB9,0x51,0x9B,0x33,0x74,0xCA,0xBD,0x8A,0xC5,0x4F,0xDC,0x95,0x1D,0x69,0xE8,0x7F );
-static const ble_uuid_t * ProtocolVersion_UUID = BLE_UUID128_DECLARE(0x06,0x27,0xEE,0x2B,0x39,0x3D,0x82,0x8F,0x6F,0x45,0x08,0xB5,0x18,0xD0,0x1F,0x8F);
-
 static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 static uint8_t peer_addr[6];
 
@@ -227,6 +192,24 @@ err:
     return ble_gap_terminate(peer->conn_handle, BLE_ERR_UNSUPPORTED);
 }
 
+static void blecent_unsubscribe_subscribe_to(const struct peer *peer, const ble_uuid_t *service_uuid_to_subscribe, int type){
+    blecent_subscribe_to(peer, service_uuid_to_subscribe, 0);
+    vTaskDelay(2000);
+    blecent_subscribe_to(peer, service_uuid_to_subscribe, type);
+}
+
+static void blecent_unsubscribe_subscribe_incoming(){
+    if(ble_connection_handle == BLE_HS_CONN_HANDLE_NONE){
+        MODLOG_DFLT(ERROR, "[ BLECENT ] blecent_update_name NO HANDLE1\n");
+        return;
+    }
+    const struct peer *peer;
+    peer = peer_find(ble_connection_handle);
+    blecent_unsubscribe_subscribe_to(peer, IncomingCameraControl_UUID, 2);
+    return;
+}
+
+// have to be here because we need this on update
 static void blecent_write_name(const struct peer *peer){
     const struct peer_chr *chr;
     int rc;
@@ -252,34 +235,6 @@ err:
     ble_gap_terminate(peer->conn_handle, BLE_ERR_UNSUPPORTED);  
 }
 
-static void blecent_update_name(){
-    if(ble_connection_handle == BLE_HS_CONN_HANDLE_NONE){
-        MODLOG_DFLT(ERROR, "[ BLECENT ] blecent_update_name NO HANDLE1\n");
-        return;
-    }
-    const struct peer *peer;
-    peer = peer_find(ble_connection_handle);
-    //blecent_write_name(peer);
-    return;
-}
-
-static void blecent_unsubscribe_subscribe_to(const struct peer *peer, const ble_uuid_t *service_uuid_to_subscribe, int type){
-    blecent_subscribe_to(peer, service_uuid_to_subscribe, 0);
-    vTaskDelay(2000);
-    blecent_subscribe_to(peer, service_uuid_to_subscribe, type);
-}
-
-static void blecent_unsubscribe_subscribe_incoming(){
-    if(ble_connection_handle == BLE_HS_CONN_HANDLE_NONE){
-        MODLOG_DFLT(ERROR, "[ BLECENT ] blecent_update_name NO HANDLE1\n");
-        return;
-    }
-    const struct peer *peer;
-    peer = peer_find(ble_connection_handle);
-    blecent_unsubscribe_subscribe_to(peer, IncomingCameraControl_UUID, 2);
-    return;
-}
-
 static void blecent_on_disc_complete(const struct peer *peer, int status, void *arg)
 {
     if (status != 0) {
@@ -289,7 +244,7 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     MODLOG_DFLT(WARN, "[ BLECENT ] Service discovery complete; status = %d conn_handle = %d\n", status, peer->conn_handle);
 
     // write our name first like ESP-BLE-XXZZYY-255
-    //blecent_write_name(peer);
+    blecent_write_name(peer);
 
     // subscribe to the IncomingCameraControl_UUID
     // 2 means notifications with ACK aka INDICATIONS
