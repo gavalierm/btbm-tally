@@ -126,7 +126,7 @@ static int s_retry_num = 0;
 // because CCU protocol use First Byte as "destination", so like CCU data for Camera 1 have first byte set to 01
 // FF aka 255 is for broadcast for all devices
 // we start as 255 to catch all messages, after MQTT handskage we will wait to "Who I M" message from controller
-int who_im = 255; //255 means all data is for me
+int who_im = 99; //00 means all data is for me
 int signaling = 0;
 //
 uint8_t esp_mac_address[6] = {0};
@@ -171,11 +171,11 @@ void BLE_notifyMqtt(uint8_t id) {
     //BLE is custom notification and is defined in PROTOCOL
     //struct is consitent we change only last byte
     //Custom: 0 = disconnected, 1 = connecting, 2 = connected, 3 = timeout, 4 = need passcode, 5 = need camera_id
-    const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x00, 0x01, 0x00, id};
+    const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x00, 0x01, 0x00, id, 0x00, 0x00, 0x00};
 
     //ESP_LOGW(BLE_TAG,"BLE_notifyMqtt");
 
-    esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0);
+    esp_mqtt_client_publish(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, 12, 0, 0);
 }
 
 int hearbbeat_counter = 0;
@@ -237,7 +237,7 @@ void BLE_onReceive(const struct os_mbuf *om){
         ESP_LOG_BUFFER_HEX("DATA", data, data_len); //Log is formated to 16 bytes per LINE
         // send data to mqtt using enqueue whis is async-like behavior
         // sending from camera to the operator do not have priorty
-        esp_mqtt_client_enqueue(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, sizeof(data), 0, 0, true);
+        esp_mqtt_client_enqueue(mqtt_client, MQTT_DOWNSTREAM_TOPIC, (const char *)data, data_len, 0, 0, true);
 
         // Free the allocated buffer
         free(data);
@@ -287,11 +287,18 @@ void BLE_sendDisconnect(){
     }
     ble_gap_terminate(ble_connection_handle, BLE_ERR_REM_USER_CONN_TERM);
 }
-void BLE_sendData(const uint8_t *event_data){
+void BLE_sendData(const uint8_t *event_data, size_t data_len){
     if(esp_ble_state != STATE_CONNECTED){
+        ESP_LOGW(APP_TAG,"BLE_sendData not connected");
         return;
     }
-    blecent_write_to_outgoing(event_data);
+    // Convert data
+    //uint8_t* nimbleData = convertData(event_data, data_len);
+
+    // Use ble_gattc_write_flat with nimbleData
+    //ble_gattc_write_flat(ble_connection_handle, ble_write_handle, nimbleData, event_data_len * sizeof(uint32_t), NULL, NULL);
+    //ESP_LOGW(APP_TAG,"\n\n\n\nBLE_sendData Send....\n\n\n\n");
+    blecent_write_to_outgoing(event_data, data_len);
 }
 /*
  * WIFI
@@ -384,6 +391,7 @@ static void  wifi_app_start(void)
 
 static void MQTT_onReceiveTally(esp_mqtt_event_handle_t event){
     //FF 05 00 00 81 03 00 00 505b06 00 //pass
+    //
     //ESP_LOGW(APP_TAG, "MQTT_onReceiveTally: ");
     switch (event->data[5]) {
         case 0:
@@ -513,6 +521,14 @@ static void MQTT_onReceiveCCU(esp_mqtt_event_handle_t event){
                 break;
             }     
     }
+
+    ESP_LOGW(APP_TAG, "MQTT_onReceiveCCU: BLE_sendData %d, %s", event->data_len, event->data);
+    //
+    // All data sent to the camera have to have 0xFF as destination, otherwise will be rejected
+    // because we use first byte as destination to determine camera id we need this to overwrite here
+    event->data[0] = 0xff;
+    //
+    BLE_sendData((const uint8_t *)event->data, event->data_len);
 }
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -682,7 +698,7 @@ void loopBLE(){
 }
 
 void loopWhoim(){
-    if(who_im != 255 || esp_whoim_state == STATE_CONNECTED){ //whoim without timeout!!! whoim is essential
+    if(who_im != 99 || who_im != 0 || esp_whoim_state == STATE_CONNECTED){ //whoim without timeout!!! whoim is essential
         vTaskDelay(10);
         return;
     }
@@ -692,10 +708,10 @@ void loopWhoim(){
     //setup notification data
     //const uint8_t data[] = {0xFF, 0x05, 0x00, 0x00, 0x81, 0x01, 0x01, 0x00, 0x00};
 
-    while ( who_im == 255 && esp_whoim_state != STATE_TIMEOUT && esp_whoim_state != STATE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
+    while ( who_im >= 99 && who_im <= 0 && esp_whoim_state != STATE_TIMEOUT && esp_whoim_state != STATE_CONNECTED && ( (millis() - startTime) < (timeout * 1000) ) ) {
         do_signal_blink_panic(violet);
     }
-    if(who_im == 255){
+    if(who_im >= 99 || who_im <= 0){
         esp_whoim_state = STATE_TIMEOUT;
         do_signal(violet);
     }else{
@@ -741,8 +757,8 @@ void app_main(void)
 
     //
     who_im = get_integer_value("who_im");
-    if(who_im < 0 || who_im > 254){
-        who_im = 255;
+    if(who_im <= 0 || who_im >= 99){
+        who_im = 99;
     }
     
     //
@@ -787,7 +803,7 @@ void app_main(void)
             vTaskDelay(5000);
         }
     }
-
+    ESP_LOGE(APP_TAG, "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nWHOIM\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
     //boot up luminance is at full
     //after bootup load stored luminance
     luminance = get_integer_value("luminance");
@@ -795,13 +811,14 @@ void app_main(void)
         luminance = 255;
     }
     check_signaling();
-    //bool on = 0; //for testing purpose
-    // uint8_t data_array[12]; //for testing purpose
+    bool test = false;
+    bool on = 0; //for testing purpose
+    uint8_t data_array[12]; //for testing purpose
 
     while (1) {
         // This is only for testing purpose
-        /*
-        if(esp_ble_state == STATE_CONNECTED){
+        
+        if(esp_ble_state == STATE_CONNECTED && test == true){
             if (on) {
                 // Update values if 'on' is true
                 memcpy(data_array, (uint8_t[]){0xFF, 0x05, 0x00, 0x00, 0x01, 0x0A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00}, sizeof(data_array));
@@ -811,15 +828,15 @@ void app_main(void)
             }
             on = !on;
             // Call the function with the data array
-            BLE_sendData(data_array);    
+            BLE_sendData(data_array, 12);    
         }
-        */
+        
 
         // essential to keep status of all services
         loopWifi();
         loopMQTT(); 
         loopBLE(); 
         loopWhoim();
-        vTaskDelay(5000); // every 5 seconds
+        vTaskDelay(pdMS_TO_TICKS(5000)); // every 5 seconds
     }
 }

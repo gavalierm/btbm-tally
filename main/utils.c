@@ -31,11 +31,31 @@ int get_integer_value(const char* key) {
 }
 
 
+// Function to convert uint32_t* data to uint8_t* data
+uint8_t* convertData(uint32_t* inputData, size_t length) {
+    uint8_t* outputData = (uint8_t*)malloc(length * sizeof(uint8_t));
+
+    if (outputData != NULL) {
+        for (size_t i = 0; i < length; i++) {
+            // Extract individual bytes from the 32-bit integer in little-endian order
+            outputData[i * 4]     = (inputData[i] >> 0) & 0xFF;
+            outputData[i * 4 + 1] = (inputData[i] >> 8) & 0xFF;
+            outputData[i * 4 + 2] = (inputData[i] >> 16) & 0xFF;
+            outputData[i * 4 + 3] = (inputData[i] >> 24) & 0xFF;
+        }
+    }
+
+    return outputData;
+}
+
+
 void update_esp_name(){
     // Ensure id fits within three digits
     if(who_im <= 0 || who_im > 99){
+        esp_whoim_state = STATE_DISCONNECTED;
         return;
     }
+    esp_whoim_state = STATE_CONNECTED;
     snprintf(esp_device_hostname + 8, sizeof(esp_device_hostname) - 8, "%02X%02X%02X-%02d", esp_mac_address[3], esp_mac_address[4], esp_mac_address[5], who_im);
     //ESP_LOGW(APP_TAG, "Updated Hostname: %s\n", esp_device_hostname);
     store_integer_value("who_im", who_im);

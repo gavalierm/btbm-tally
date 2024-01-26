@@ -96,7 +96,7 @@ static void blecent_log_mbuf(const struct os_mbuf *om){
 }
 
 static uint8_t *event_data_buffer = NULL;
-static void blecent_write_to_outgoing(const uint8_t *event_data){
+static void blecent_write_to_outgoing(const uint8_t *event_data, size_t data_length){
     int rc;
     MODLOG_DFLT(WARN, "[ BLECENT ] blecent_write_to_outgoind\n");
 
@@ -113,7 +113,8 @@ static void blecent_write_to_outgoing(const uint8_t *event_data){
     }
 
     // Calculate data_len with padding
-    uint8_t data_len = event_data[1] + 4;
+    //uint8_t data_len = event_data[1] + 4;
+    uint8_t data_len = data_length;
     // Calculate the number of padding bytes
     size_t padding_bytes = (4 - (data_len % 4)) % 4;
     // Consider padding in the total length
